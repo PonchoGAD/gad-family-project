@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "GAD Family",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "scheme": "gadfamily",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+
+    "ios": {
+      "bundleIdentifier": "com.gadfamily.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMotionUsageDescription": "We use motion data to count your steps and reward activity.",
+        "NSLocationWhenInUseUsageDescription": "We use your location to show family members and ensure safety."
+      }
+    },
+
+    "android": {
+      "package": "com.gadfamily.app",
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+
+    "plugins": [
+      ["expo-secure-store", { "faceIDPermission": "Allow GAD Family to use Face ID for secure access." }]
+    ]
+  }
+}

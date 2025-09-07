@@ -1,0 +1,20 @@
+{
+  "name": "gad-functions",
+  "main": "lib/index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions",
+    "dev": "firebase emulators:start --only functions"
+  },
+  "dependencies": {
+    "@dataconnect/generated": "file:src/dataconnect-generated",
+    "ethers": "^6.13.0",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

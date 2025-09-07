@@ -1,0 +1,12 @@
+{
+  "token": "0x858bab88A5b8D7F29a40380C5F2D8d0b8812FE62",
+  "teamFinanceLock": "0x_team_finance_lock_contract",
+  "treasurySafe": "0x_treasury_safe",
+  "distributionSafe": "0xe08F53ac892E89b6Ba431b90A96C640A39386736",
+  "hotPayoutWallet": "0xA5f7ce6308333f9A596A498DcAaae6D30F1bB094",
+  "decimals": 18,
+  "lockStart": "2025-09-01",
+  "tranches": 10,
+  "monthsBetween": 6,
+  "trancheRaw": "500000000000"
+}

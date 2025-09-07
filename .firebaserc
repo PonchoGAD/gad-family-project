@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "gad-family-us",
+    "prod-us": "gad-family-us"
+  },
+  "targets": {},
+  "etags": {}
+}
