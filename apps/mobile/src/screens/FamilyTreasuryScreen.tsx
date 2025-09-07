@@ -4,7 +4,7 @@ import { auth, db } from "../lib/firebase";
 import { ensureUserDoc } from "../lib/user";
 import { createFamily, joinFamilyByCode, getFamily, subscribeMembers, shareInviteLink } from "../lib/families";
 import { doc, getDoc } from "firebase/firestore";
-import { ScrollView, View } from "react-native";
+import { ScrollView } from "react-native";
 import LockTimer from "../components/LockTimer";
 import ProofOfLock from "../components/ProofOfLock";
 
