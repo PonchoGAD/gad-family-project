@@ -26,3 +26,5 @@ export * from "./modules/staking";     // PROMPT 21
 
 // семейный чат (отдельный модуль)
 export * from "./modules/chat";
+
+export * from "./compat/mobileV1.js";
