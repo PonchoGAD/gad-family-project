@@ -2,20 +2,24 @@
   "name": "mobile",
   "version": "1.0.0",
   "main": "index.ts",
+  "private": true,
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "expo start --clear",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
+    "@react-native-async-storage/async-storage": "2.1.2",
     "@react-navigation/bottom-tabs": "^7.4.6",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.25",
-    "dataconnect-generated": "link:../../../AppData/Local/pnpm/global/5/node_modules/src/dataconnect-generated",
     "ethers": "^6.15.0",
     "expo": "~53.0.22",
+    "expo-constants": "~17.1.7",
+    "expo-crypto": "~14.1.5",
     "expo-linking": "~7.1.7",
     "expo-location": "~18.1.6",
     "expo-notifications": "~0.31.4",
@@ -27,14 +31,17 @@
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-get-random-values": "^1.11.0",
+    "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@eslint/js": "^9.8.0",
     "@types/react": "~19.0.10",
-    "typescript": "~5.8.3"
-  },
-  "private": true
+    "eslint": "9.35.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.8.0"
+  }
 }

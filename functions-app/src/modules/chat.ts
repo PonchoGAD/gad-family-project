@@ -465,3 +465,28 @@ export const onFamilyMessageCreated = onDocumentCreated(
     }
   },
 );
+
+import { nanoid } from "nanoid";
+
+export const chatCreateRoom = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "familyId required");
+  return { ok: true, roomId: "room_" + nanoid(8) };
+});
+
+export const chatSendMessage = onCall(async (req) => {
+  const { roomId, text } = req.data ?? {};
+  if (!roomId || !text) throw new HttpsError("invalid-argument", "roomId & text required");
+  return { ok: true, id: "msg_" + nanoid(8) };
+});
+
+export const chatFetchMessages = onCall(async (req) => {
+  const { roomId } = req.data ?? {};
+  if (!roomId) throw new HttpsError("invalid-argument", "roomId required");
+  return { ok: true, items: [] };
+});
+
+// Алиасы
+export { chatSendMessage as chatSendMessageCallable };
+export { chatFetchMessages as chatFetchMessagesCallable };
+export { chatCreateRoom as chatCreateRoomCallable };

@@ -3,6 +3,13 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
 import { getFamilyPlanQuick, PLAN_APR_BONUS_BPS, Plan } from "./plans";
+export {
+  stakingListPools as stakingListPoolsCallable,
+  stakingDeposit as stakingDepositCallable,
+  stakingWithdraw as stakingWithdrawCallable,
+  stakingClaimRewards as stakingClaimRewardsCallable
+} from "./staking.js";
+
 
 /**
  * Коллекции:
@@ -301,3 +308,28 @@ export const stakingMaturityNotifier = onSchedule(
     }
   },
 );
+
+export const stakingListPools = onCall(async () => {
+  return { ok: true, pools: [] };
+});
+
+export const stakingDeposit = onCall(async (req) => {
+  const { poolId, amount } = req.data ?? {};
+  if (!poolId || !amount) throw new HttpsError("invalid-argument", "poolId & amount required");
+  return { ok: true, txId: "stake_dep_mock" };
+});
+
+export const stakingWithdraw = onCall(async (req) => {
+  const { poolId, amount } = req.data ?? {};
+  if (!poolId || !amount) throw new HttpsError("invalid-argument", "poolId & amount required");
+  return { ok: true, txId: "stake_wd_mock" };
+});
+
+export const stakingClaimRewards = onCall(async (req) => {
+  const { poolId } = req.data ?? {};
+  if (!poolId) throw new HttpsError("invalid-argument", "poolId required");
+  return { ok: true, txId: "stake_claim_mock" };
+});
+
+// Алиасы
+

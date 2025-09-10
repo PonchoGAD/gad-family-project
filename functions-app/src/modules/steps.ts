@@ -1,6 +1,8 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { US_REGIONS } from "../config";
+export { stepsAdd as stepsAddCallable } from "./steps.js";
+
 
 export const submitDailySteps = onCall(
   { region: US_REGIONS, enforceAppCheck: true },
@@ -44,3 +46,14 @@ export const submitDailySteps = onCall(
     return { ok: true, points };
   },
 );
+
+export const stepsAdd = onCall(async (req) => {
+  const { uid } = req.auth ?? {};
+  const { steps, date } = req.data ?? {};
+  if (!uid) throw new HttpsError("unauthenticated", "Auth required");
+  if (typeof steps !== "number") throw new HttpsError("invalid-argument", "steps required");
+  return { ok: true, total: steps, date: date ?? Date.now() };
+});
+
+// Алиас
+

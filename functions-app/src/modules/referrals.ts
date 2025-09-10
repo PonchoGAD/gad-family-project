@@ -2,6 +2,9 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
+export { referralsCreateLink as referralsCreateLinkCallable };
+export { referralsActivate as referralsActivateCallable };
+export { getReferralDashboard as referralsDashboardCallable };
 
 // ------------------------ Types & helpers ------------------------
 
@@ -427,3 +430,25 @@ export const referralLeaderboardMonthly = onCall(
     return { ok: true, items: rows };
   },
 );
+
+export const referralsCreateLink = onCall(async (req) => {
+  const { uid } = req.auth ?? {};
+  if (!uid) throw new HttpsError("unauthenticated", "Auth required");
+  const url = `https://gad.family/r/${uid}`;
+  return { ok: true, url };
+});
+
+export const referralsActivate = onCall(async (req) => {
+  const { code } = req.data ?? {};
+  if (!code) throw new HttpsError("invalid-argument", "code required");
+  return { ok: true };
+});
+
+//export const getReferralDashboard = onCall(async (req) => {
+// const { uid } = req.auth ?? {};
+//  if (!uid) throw new HttpsError("unauthenticated", "Auth required");
+//  return { ok: true, stats: { clicks: 0, signups: 0, rewards: 0 } };
+//});
+
+// Алиасы (импорт в mobileV1 ждёт другое имя)
+

@@ -1,7 +1,9 @@
+// functions-app/src/modules/vault.ts
+
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { US_REGIONS } from "../config";
+import { CALLABLE_OPTS, US_REGIONS } from "../config.js";
 
 /** === Общие типы/константы модуля сейфа === */
 const CURRENCIES = ["GAD", "BNB", "USDT"] as const;
@@ -25,7 +27,8 @@ async function getFamilyContext(uid: string) {
 async function ensureVaultDoc(
   famRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>,
 ) {
-  const v = await famRef.collection("").doc("vault").get(); // doc id = "vault"
+  // doc id = "vault" внутри корня семьи (оставляю структуру как у тебя)
+  const v = await famRef.collection("").doc("vault").get();
   if (!v.exists) {
     await famRef
       .collection("")
@@ -54,55 +57,53 @@ async function writeVaultLedger(
   });
 }
 
-/** === API: политика распределения сейфа === */
-export const setVaultPolicy = onCall(
-  { region: US_REGIONS, enforceAppCheck: true },
-  async (req: any) => {
-    const actor = req.auth?.uid;
-    if (!actor) throw new HttpsError("unauthenticated", "Auth required");
-    const { ownerPct, participantsPct, fundsPct } = req.data as {
-      ownerPct: number;
-      participantsPct: number;
-      fundsPct?: { [k: string]: number };
-    };
+/** === Политика распределения сейфа === */
+export const setVaultPolicy = onCall(CALLABLE_OPTS, async (req) => {
+  const actor = req.auth?.uid;
+  if (!actor) throw new HttpsError("unauthenticated", "Auth required");
+  const { ownerPct, participantsPct, fundsPct } = req.data as {
+    ownerPct: number;
+    participantsPct: number;
+    fundsPct?: { [k: string]: number };
+  };
 
-    if (ownerPct < 0 || participantsPct < 0)
-      throw new HttpsError("invalid-argument", "bad percents");
-    const sum =
-      ownerPct +
-      participantsPct +
-      Object.values(fundsPct ?? {}).reduce((a, b) => a + b, 0);
-    if (Math.round(sum) !== 100)
-      throw new HttpsError("invalid-argument", "Percents must sum to 100");
+  if (ownerPct < 0 || participantsPct < 0)
+    throw new HttpsError("invalid-argument", "bad percents");
+  const sum =
+    ownerPct +
+    participantsPct +
+    Object.values(fundsPct ?? {}).reduce((a, b) => a + b, 0);
+  if (Math.round(sum) !== 100)
+    throw new HttpsError("invalid-argument", "Percents must sum to 100");
 
-    const { db, fid, famRef, fam } = await getFamilyContext(actor);
-    if (fam.ownerUid !== actor)
-      throw new HttpsError("permission-denied", "Only owner can change policy");
+  const { db, fid, famRef, fam } = await getFamilyContext(actor);
+  if (fam.ownerUid !== actor)
+    throw new HttpsError("permission-denied", "Only owner can change policy");
 
-    await ensureVaultDoc(famRef);
-    await famRef
-      .collection("")
-      .doc("vault")
-      .set(
-        {
-          policy: { ownerPct, participantsPct, fundsPct: fundsPct ?? {} },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+  await ensureVaultDoc(famRef);
+  await famRef
+    .collection("")
+    .doc("vault")
+    .set(
+      {
+        policy: { ownerPct, participantsPct, fundsPct: fundsPct ?? {} },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
 
-    await writeVaultLedger(db, fid, actor, "setVaultPolicy", {
-      ownerPct,
-      participantsPct,
-      fundsPct,
-    });
-    return { ok: true };
-  },
-);
+  await writeVaultLedger(db, fid, actor, "setVaultPolicy", {
+    ownerPct,
+    participantsPct,
+    fundsPct,
+  });
+  return { ok: true };
+});
 
-/** === Тригер распределения доходов сейфа === */
+/** === Триггер распределения доходов сейфа === */
 export const onVaultIncome = onDocumentCreated(
-  { region: "us-east4", document: "families/{fid}/vaultIncomes/{iid}" },
+  // важно: здесь регион — строка (не массив), чтобы не ловить TS2322
+  { region: US_REGIONS[0] as string, document: "families/{fid}/vaultIncomes/{iid}" },
   async (event) => {
     const data = event.data?.data();
     if (!data) return;
@@ -211,106 +212,121 @@ export const onVaultIncome = onDocumentCreated(
 );
 
 /** === Перевод между балансом и фризом сейфа (freeze/unfreeze) === */
-export const freezeFunds = onCall(
-  { region: US_REGIONS, enforceAppCheck: true },
-  async (req: any) => {
-    const actor = req.auth?.uid;
-    if (!actor) throw new HttpsError("unauthenticated", "Auth required");
-    const { currency, amount, direction } = req.data as {
-      currency: Currency;
-      amount: number;
-      direction: "freeze" | "unfreeze";
-    };
-    if (!isCurrency(currency))
-      throw new HttpsError("invalid-argument", "invalid currency");
-    if (amount <= 0)
-      throw new HttpsError("invalid-argument", "amount > 0 required");
+export const freezeFunds = onCall(CALLABLE_OPTS, async (req) => {
+  const actor = req.auth?.uid;
+  if (!actor) throw new HttpsError("unauthenticated", "Auth required");
+  const { currency, amount, direction } = req.data as {
+    currency: Currency;
+    amount: number;
+    direction: "freeze" | "unfreeze";
+  };
+  if (!isCurrency(currency))
+    throw new HttpsError("invalid-argument", "invalid currency");
+  if (amount <= 0)
+    throw new HttpsError("invalid-argument", "amount > 0 required");
 
-    const { db, fid, famRef, fam } = await getFamilyContext(actor);
-    if (fam.ownerUid !== actor)
-      throw new HttpsError("permission-denied", "Only owner");
+  const { db, fid, famRef, fam } = await getFamilyContext(actor);
+  if (fam.ownerUid !== actor)
+    throw new HttpsError("permission-denied", "Only owner");
 
-    await ensureVaultDoc(famRef);
-    const vRef = famRef.collection("").doc("vault");
-    const now = admin.firestore.FieldValue.serverTimestamp();
+  await ensureVaultDoc(famRef);
+  const vRef = famRef.collection("").doc("vault");
+  const now = admin.firestore.FieldValue.serverTimestamp();
 
-    if (direction === "freeze") {
-      await vRef.set(
-        {
-          balances: {
-            [currency]: admin.firestore.FieldValue.increment(-amount),
-          },
-          frozen: { [currency]: admin.firestore.FieldValue.increment(+amount) },
-          updatedAt: now,
+  if (direction === "freeze") {
+    await vRef.set(
+      {
+        balances: {
+          [currency]: admin.firestore.FieldValue.increment(-amount),
         },
-        { merge: true },
-      );
-    } else {
-      await vRef.set(
-        {
-          balances: {
-            [currency]: admin.firestore.FieldValue.increment(+amount),
-          },
-          frozen: { [currency]: admin.firestore.FieldValue.increment(-amount) },
-            updatedAt: now,
+        frozen: { [currency]: admin.firestore.FieldValue.increment(+amount) },
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  } else {
+    await vRef.set(
+      {
+        balances: {
+          [currency]: admin.firestore.FieldValue.increment(+amount),
         },
-        { merge: true },
-      );
-    }
+        frozen: { [currency]: admin.firestore.FieldValue.increment(-amount) },
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  }
 
-    await writeVaultLedger(db, fid, actor, direction, { currency, amount });
-    return { ok: true };
-  },
-);
+  await writeVaultLedger(db, fid, actor, direction, { currency, amount });
+  return { ok: true };
+});
 
 /** === Статус сейфа (балансы/политика/участники) === */
-export const getVaultStatus = onCall(
-  { region: US_REGIONS, enforceAppCheck: true },
-  async (req: any) => {
-    const actor = req.auth?.uid;
-    if (!actor) throw new HttpsError("unauthenticated", "Auth required");
-    const { famRef } = await getFamilyContext(actor);
-    await ensureVaultDoc(famRef);
+export const getVaultStatus = onCall(CALLABLE_OPTS, async (req) => {
+  const actor = req.auth?.uid;
+  if (!actor) throw new HttpsError("unauthenticated", "Auth required");
+  const { famRef } = await getFamilyContext(actor);
+  await ensureVaultDoc(famRef);
 
-    const v = (await famRef.collection("").doc("vault").get()).data();
-    const membersSnap = await famRef.collection("vaultMembers").get();
-    const members = membersSnap.docs.map((d) => ({
-      uid: d.id,
-      ...(d.data() as any),
-    }));
+  const v = (await famRef.collection("").doc("vault").get()).data();
+  const membersSnap = await famRef.collection("vaultMembers").get();
+  const members = membersSnap.docs.map((d) => ({
+    uid: d.id,
+    ...(d.data() as any),
+  }));
 
-    return { ok: true, vault: v, members };
-  },
-);
+  return { ok: true, vault: v, members };
+});
 
 /** === История сейфа (incomes/distributions) === */
-export const getVaultHistory = onCall(
-  { region: US_REGIONS, enforceAppCheck: true },
-  async (req: any) => {
-    const actor = req.auth?.uid;
-    if (!actor) throw new HttpsError("unauthenticated", "Auth required");
-    const { famRef } = await getFamilyContext(actor);
+export const getVaultHistory = onCall(CALLABLE_OPTS, async (req) => {
+  const actor = req.auth?.uid;
+  if (!actor) throw new HttpsError("unauthenticated", "Auth required");
+  const { famRef } = await getFamilyContext(actor);
 
-    const incSnap = await famRef
-      .collection("vaultIncomes")
-      .orderBy("at", "desc")
-      .limit(50)
-      .get();
-    const distSnap = await famRef
-      .collection("vaultDistributions")
-      .orderBy("at", "desc")
-      .limit(50)
-      .get();
+  const incSnap = await famRef
+    .collection("vaultIncomes")
+    .orderBy("at", "desc")
+    .limit(50)
+    .get();
+  const distSnap = await famRef
+    .collection("vaultDistributions")
+    .orderBy("at", "desc")
+    .limit(50)
+    .get();
 
-    const incomes = incSnap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as any),
-    }));
-    const dists = distSnap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as any),
-    }));
+  const incomes = incSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  }));
+  const dists = distSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  }));
 
-    return { ok: true, incomes, distributions: dists };
-  },
-);
+  return { ok: true, incomes, distributions: dists };
+});
+
+/** === Простые mock-функции пополнения/вывода (оставляю интерфейс как был) === */
+export const depositToVault = onCall(CALLABLE_OPTS, async (req) => {
+  const { familyId, amount } = req.data ?? {};
+  if (!familyId || typeof amount !== "number")
+    throw new HttpsError("invalid-argument", "familyId & amount required");
+  // TODO: write deposit record
+  return { ok: true, txId: "tx_dep_mock" };
+});
+
+export const withdrawFromVault = onCall(CALLABLE_OPTS, async (req) => {
+  const { familyId, amount } = req.data ?? {};
+  if (!familyId || typeof amount !== "number")
+    throw new HttpsError("invalid-argument", "familyId & amount required");
+  // TODO: write withdrawal record
+  return { ok: true, txId: "tx_wd_mock" };
+});
+
+/** === Алиасы для совместимости с mobileV1 === */
+export {
+  depositToVault as depositToVaultCallable,
+  withdrawFromVault as withdrawFromVaultCallable,
+  getVaultHistory as getVaultHistoryCallable,
+};

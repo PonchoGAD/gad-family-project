@@ -103,3 +103,46 @@ export const getDistributionHistory = onCall(
     return { ok: true, items };
   },
 );
+
+// === совместимость с mobile v1 ===
+
+import { getFirestore } from "firebase-admin/firestore";
+import { nanoid } from "nanoid";
+
+export const createFamily = onCall(async (req) => {
+  const { name } = req.data ?? {};
+  if (!name) throw new HttpsError("invalid-argument", "Missing family name");
+  const db = getFirestore();
+  const id = "fam_" + nanoid(10);
+  await db.collection("families").doc(id).set({
+    id, name, createdAt: Date.now(), ownerUid: req.auth?.uid ?? null,
+  });
+  return { ok: true, id };
+});
+
+export const joinFamilyByCode = onCall(async (req) => {
+  const { code } = req.data ?? {};
+  if (!code) throw new HttpsError("invalid-argument", "Missing invite code");
+  // TODO: lookup by code
+  return { ok: true, familyId: "fam_mock" };
+});
+
+export const getFamilySummary = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "Missing familyId");
+  // TODO: read summary from Firestore
+  return { ok: true, summary: { familyId, members: [], treasury: { balance: 0 } } };
+});
+
+export const shareInviteLink = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "Missing familyId");
+  const url = `https://gad.family/invite/${familyId}`;
+  return { ok: true, url };
+});
+
+// Алиасы для совместимости
+export { createFamily as createFamilyCallable };
+export { joinFamilyByCode as joinFamilyByCodeCallable };
+export { getFamilySummary as getFamilySummaryCallable };
+export { shareInviteLink as shareInviteLinkCallable };

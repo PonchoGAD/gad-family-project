@@ -1,15 +1,9 @@
 import { defineSecret } from "firebase-functions/params";
 import { CallableOptions } from "firebase-functions/v2/https";
-
-/** Регионы (как и раньше) */
-export const US_REGIONS: string[] = ["us-east1", "us-east4"];
-
-export const US_REGIONS_MUT: string[] = [...US_REGIONS];
-
-export const CALLABLE_OPTS: CallableOptions = {
-  region: US_REGIONS_MUT,               // ВАЖНО: именно MUT (массив не readonly)
-  enforceAppCheck: true,
-};
+export const REGION: string = "us-east1";
+export const US_REGIONS: string[] = [REGION];
+export const CALLABLE_OPTS = { region: REGION } as const;
+// src/config.ts
 
 
 /** Публичная конфигурация казначейства */

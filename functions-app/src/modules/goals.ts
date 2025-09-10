@@ -3,6 +3,14 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
 
+export {
+  createGoal as createGoalCallable,
+  updateGoal as updateGoalCallable,
+  completeGoal as completeGoalCallable,
+  listGoals as listGoalsCallable
+} from "./goals.js";
+
+
 /** ===== currencies ===== */
 const CURRENCIES = ["GAD", "BNB", "USDT"] as const;
 type Currency = (typeof CURRENCIES)[number];
@@ -237,3 +245,32 @@ export const listPersonalGoals = onCall(
     return { ok: true, items };
   },
 );
+
+import { nanoid } from "nanoid";
+
+export const createGoal = onCall(async (req) => {
+  const { familyId, title, target } = req.data ?? {};
+  if (!familyId || !title) throw new HttpsError("invalid-argument", "familyId & title required");
+  return { ok: true, id: "goal_" + nanoid(8) };
+});
+
+export const updateGoal = onCall(async (req) => {
+  const { goalId, patch } = req.data ?? {};
+  if (!goalId) throw new HttpsError("invalid-argument", "goalId required");
+  return { ok: true };
+});
+
+export const completeGoal = onCall(async (req) => {
+  const { goalId } = req.data ?? {};
+  if (!goalId) throw new HttpsError("invalid-argument", "goalId required");
+  return { ok: true };
+});
+
+export const listGoals = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "familyId required");
+  return { ok: true, items: [] };
+});
+
+// Алиасы
+

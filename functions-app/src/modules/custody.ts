@@ -2,6 +2,11 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
+export {
+  custodySetRules as custodySetRulesCallable,
+  custodyApproveTx as custodyApproveTxCallable
+} from "./custody.js";
+
 
 /** === helpers === */
 function computeAge(dobISO: string) {
@@ -110,3 +115,19 @@ export const dailyCheckCustodialUpgrades = onSchedule(
     }
   },
 );
+
+
+export const custodySetRules = onCall(async (req) => {
+  const { familyId, rules } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "familyId required");
+  return { ok: true };
+});
+
+export const custodyApproveTx = onCall(async (req) => {
+  const { txId } = req.data ?? {};
+  if (!txId) throw new HttpsError("invalid-argument", "txId required");
+  return { ok: true };
+});
+
+// Алиасы
+

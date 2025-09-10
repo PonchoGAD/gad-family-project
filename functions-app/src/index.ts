@@ -28,3 +28,4 @@ export * from "./modules/staking";     // PROMPT 21
 export * from "./modules/chat";
 
 export * from "./compat/mobileV1.js";
+export * from "./compat/mobileV1";

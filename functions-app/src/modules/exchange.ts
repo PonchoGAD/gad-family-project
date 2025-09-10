@@ -2,6 +2,11 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
+export {
+  exchangeQuote as exchangeQuoteCallable,
+  exchangeSwap as exchangeSwapCallable
+} from "./exchange.js";
+
 
 /** ===== helpers ===== */
 async function getFamilyContext(uid: string) {
@@ -224,3 +229,17 @@ export const listExchangeHistory = onCall(
     return { ok: true, items };
   },
 );
+
+export const exchangeQuote = onCall(async (req) => {
+  const { from, to, amount } = req.data ?? {};
+  if (!from || !to || !amount) throw new HttpsError("invalid-argument", "from,to,amount required");
+  return { ok: true, price: 1, estimatedOut: amount };
+});
+
+export const exchangeSwap = onCall(async (req) => {
+  const { from, to, amount } = req.data ?? {};
+  if (!from || !to || !amount) throw new HttpsError("invalid-argument", "from,to,amount required");
+  return { ok: true, txId: "swap_tx_mock" };
+});
+
+// Алиасы

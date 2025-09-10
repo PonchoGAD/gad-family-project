@@ -2,6 +2,11 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { US_REGIONS } from "../config";
+export {
+  alarmUpsert as alarmUpsertCallable,
+  alarmPreview as alarmPreviewCallable
+} from "./alarm.js";
+
 
 /**
  * Структура:
@@ -238,3 +243,19 @@ export const morningBriefOnAlarm = onCall(
     return { ok:true, text };
   },
 );
+
+export const alarmUpsert = onCall(async (req) => {
+  const { id, when, payload } = req.data ?? {};
+  if (!when) throw new HttpsError("invalid-argument", "when required");
+  // TODO: schedule/update job
+  return { ok: true, id: id ?? "alarm_mock" };
+});
+
+export const alarmPreview = onCall(async (req) => {
+  const { when } = req.data ?? {};
+  if (!when) throw new HttpsError("invalid-argument", "when required");
+  return { ok: true, preview: { when, message: "Alarm preview" } };
+});
+
+// Алиасы
+

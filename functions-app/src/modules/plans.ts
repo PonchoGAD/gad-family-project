@@ -229,3 +229,27 @@ export const getPlanMatrix = onCall(
   { region: US_REGIONS, enforceAppCheck: true },
   async () => ({ ok: true, matrix: PLAN_MATRIX }),
 );
+
+export const planGet = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "familyId required");
+  return { ok: true, plan: { rules: [] } };
+});
+
+export const gasSpend = onCall(async (req) => {
+  const { familyId, amount } = req.data ?? {};
+  if (!familyId || typeof amount !== "number")
+    throw new HttpsError("invalid-argument", "familyId & amount required");
+  return { ok: true };
+});
+
+export const gasGetBalance = onCall(async (req) => {
+  const { familyId } = req.data ?? {};
+  if (!familyId) throw new HttpsError("invalid-argument", "familyId required");
+  return { ok: true, balance: 0 };
+});
+
+// Алиасы
+export { planGet as planGetCallable };
+export { gasSpend as gasSpendCallable };
+export { gasGetBalance as gasGetBalanceCallable };
