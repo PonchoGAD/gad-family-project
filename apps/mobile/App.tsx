@@ -5,10 +5,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect } from "react";
-import { registerForPush } from "./src/services/pushService";
-
-// Screens
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
 import StepsScreen from "./src/screens/StepsScreen";
@@ -19,18 +15,16 @@ import FamilyTreasuryScreen from "./src/screens/FamilyTreasuryScreen";
 import NFTScreen from "./src/screens/NFTScreen";
 import FamilyChildrenScreen from "./src/screens/FamilyChildrenScreen";
 
+type TabRoute = { name: string };
+type TabIconArgs = { focused: boolean; size: number; color: string };
+
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
-export default function AppRoot(props:any) {
-  useEffect(() => {
-    registerForPush().catch(console.log);
-  }, []);
-  // остальной код App из шаблона Expo (оставь как есть)
-  return props.children || null;
-}
-
-function iconNameFor(routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap {
+function iconNameFor(
+  routeName: string,
+  focused: boolean
+): keyof typeof Ionicons.glyphMap {
   const baseMap: Record<string, string> = {
     Home: "home",
     Wallet: "wallet",
@@ -48,9 +42,9 @@ function iconNameFor(routeName: string, focused: boolean): keyof typeof Ionicons
 function TabsRoot() {
   return (
     <Tabs.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route }: { route: TabRoute }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused, size }) => (
+        tabBarIcon: ({ focused, size }: TabIconArgs) => (
           <Ionicons name={iconNameFor(route.name, focused)} size={size} />
         ),
         tabBarActiveTintColor: "#111827",
@@ -66,7 +60,6 @@ function TabsRoot() {
   );
 }
 
-// ПРОСТО кастуем к any, чтобы не упираться в типы
 const linking: any = {
   prefixes: [Linking.createURL("/")],
   config: {
@@ -98,14 +91,27 @@ export default function App() {
       <NavigationContainer linking={linking} theme={navTheme}>
         <SafeAreaView style={{ flex: 1 }}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            {/* Tabs как корень */}
             <Stack.Screen name="Root" component={TabsRoot} />
-
-            {/* Вложенные экраны (вне табов) */}
-            <Stack.Screen name="Steps" component={StepsScreen} options={{ headerShown: true, title: "Steps" }} />
-            <Stack.Screen name="NFTs" component={NFTScreen} options={{ headerShown: true, title: "My NFTs" }} />
-            <Stack.Screen name="FamilyTreasury" component={FamilyTreasuryScreen} options={{ headerShown: true, title: "Treasury" }} />
-            <Stack.Screen name="FamilyChildren" component={FamilyChildrenScreen} options={{ headerShown: true, title: "Children" }} />
+            <Stack.Screen
+              name="Steps"
+              component={StepsScreen}
+              options={{ headerShown: true, title: "Steps" }}
+            />
+            <Stack.Screen
+              name="NFTs"
+              component={NFTScreen}
+              options={{ headerShown: true, title: "My NFTs" }}
+            />
+            <Stack.Screen
+              name="FamilyTreasury"
+              component={FamilyTreasuryScreen}
+              options={{ headerShown: true, title: "Treasury" }}
+            />
+            <Stack.Screen
+              name="FamilyChildren"
+              component={FamilyChildrenScreen}
+              options={{ headerShown: true, title: "Children" }}
+            />
           </Stack.Navigator>
         </SafeAreaView>
       </NavigationContainer>

@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "gad-family-local"
+    "default": "gad-family-us",
+    "demo": "demo-gad-family"
   }
 }

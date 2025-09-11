@@ -1,26 +1,28 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "jsx": "react-jsx",
+    "jsx": "react-native",
     "strict": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
     "noEmit": true,
+    "skipLibCheck": true,
+    "types": [
+      "react",
+      "react-native",
+      "expo"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@src/*": [
+      "~/*": [
         "src/*"
       ]
     }
   },
   "include": [
-    "app",
-    "src",
-    "index.ts",
-    "app.config.ts"
+    "**/*.ts",
+    "**/*.tsx",
+    "index.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

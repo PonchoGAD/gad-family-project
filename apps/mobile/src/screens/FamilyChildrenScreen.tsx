@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, Button, Alert, FlatList } from "react-native";
-import { auth, db } from "../lib/firebase";
+import { auth, db } from "../firebase";
 import { collection, doc, getDoc, getDocs, setDoc, increment } from "firebase/firestore";
 
 export default function FamilyChildrenScreen(){

@@ -1,4 +1,4 @@
-﻿import { auth, db } from "./firebase";
+﻿import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export async function ensureUserDoc() {

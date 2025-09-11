@@ -1,21 +1,16 @@
-import "dotenv/config";
-
+// apps/mobile/app.config.ts
 export default {
-  expo: {
-    name: "GAD Family",
-    slug: "gad-family",
-    scheme: "gad",
-    extra: {
-      useEmulator: process.env.USE_EMULATOR === "1",
-      functionsRegion: process.env.FUNCTIONS_REGION || "us-east1",
-      firebase: {
-        apiKey: process.env.FB_API_KEY,
-        authDomain: process.env.FB_AUTH_DOMAIN,
-        projectId: process.env.FB_PROJECT_ID,
-        storageBucket: process.env.FB_STORAGE_BUCKET,
-        messagingSenderId: process.env.FB_MSG_SENDER_ID,
-        appId: process.env.FB_APP_ID
-      }
-    }
-  }
+  name: "GAD Family",
+  slug: "gad-family",
+  plugins: ["expo-secure-store"],
+  extra: {
+    USE_EMULATOR: process.env.USE_EMULATOR ?? "false",
+    FUNCTIONS_REGION: process.env.FUNCTIONS_REGION ?? "us-east1",
+    EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+    EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+    EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+    EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  },
 };

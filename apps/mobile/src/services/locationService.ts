@@ -1,16 +1,15 @@
+
 // apps/mobile/src/services/locationService.ts
 import * as Location from "expo-location";
-import { fn } from "../firebase";
+import { fn } from "../lib/functionsClient";
 
 export async function ensureLocationPermissions() {
   const fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== "granted") throw new Error("Location permission denied");
-  // опционально: background для детей
   const bg = await Location.requestBackgroundPermissionsAsync();
   return { fg, bg };
 }
 
-// простой интервал-пинг (минимум для старта)
 let _timer: any = null;
 
 export function startPinging(intervalMs = 120000) {
@@ -20,7 +19,7 @@ export function startPinging(intervalMs = 120000) {
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude: lat, longitude: lng } = pos.coords;
       const acc = pos.coords.accuracy ?? null;
-      await fn.locationPing({ lat, lng, acc });
+      await fn.geo.ping({ lat, lng, acc }); // <= поправил namespace
     } catch (e) {
       console.log("ping error", e);
     }

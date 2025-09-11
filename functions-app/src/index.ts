@@ -1,31 +1,33 @@
+// functions-app/src/index.ts
+
 import * as admin from "firebase-admin";
 admin.initializeApp();
 
-// базовая конфигурация/типы
-export * from "./config";
+// Базовая конфигурация / типы
+export * from "./config.js";
 
-// core-модули (перенос из большого index.ts)
-export * from "./modules/treasury";
-export * from "./modules/steps";
-export * from "./modules/geo";
-export * from "./modules/ownership";
-export * from "./modules/vault";
-export * from "./modules/defi";
-export * from "./modules/assistant";
-export * from "./modules/discovery";
-export * from "./modules/exchange";
-export * from "./modules/goals";
-export * from "./modules/custody";
-export * from "./modules/plans";
+// Core-модули
+export * from "./modules/treasury.js";
+export * from "./modules/steps.js";
+export * from "./modules/geo.js";
+export * from "./modules/ownership.js";
+export * from "./modules/vault.js";
+export * from "./modules/defi.js";
+export * from "./modules/assistant.js";
+export * from "./modules/discovery.js";
+export * from "./modules/exchange.js";
+export * from "./modules/goals.js";
+export * from "./modules/custody.js";
+export * from "./modules/plans.js";
 
-// новые промпты 18-21
-export * from "./modules/referrals";   // PROMPT 18
-export * from "./modules/alarm";       // PROMPT 19
-export * from "./modules/gasReserve";  // PROMPT 20
-export * from "./modules/staking";     // PROMPT 21
+// Новые промпты 18–21
+export * from "./modules/referrals.js";   // PROMPT 18
+export * from "./modules/alarm.js";       // PROMPT 19
+export * from "./modules/gasReserve.js";  // PROMPT 20
+export * from "./modules/staking.js";     // PROMPT 21
 
-// семейный чат (отдельный модуль)
-export * from "./modules/chat";
+// Семейный чат (отдельный модуль)
+export * from "./modules/chat.js";
 
+// Совместимость с mobileV1 (ТОЛЬКО один экспорт compat!)
 export * from "./compat/mobileV1.js";
-export * from "./compat/mobileV1";

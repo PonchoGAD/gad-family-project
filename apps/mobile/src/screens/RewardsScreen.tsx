@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { View, Text, FlatList } from "react-native";
-import { auth, db } from "../lib/firebase";
+import { auth, db } from "../firebase";
 import { doc, onSnapshot, collection, query, orderBy, limit } from "firebase/firestore";
 
 export default function RewardsScreen() {

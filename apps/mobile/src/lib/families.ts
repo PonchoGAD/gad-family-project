@@ -1,5 +1,5 @@
-﻿import { auth, db } from "./firebase";
-import { nanoid } from "nanoid/non-secure";
+﻿import { auth, db } from "../firebase";
+import { nanoid } from "nanoid";
 import {
   collection, doc, getDoc, setDoc, serverTimestamp,
   query, where, getDocs, onSnapshot

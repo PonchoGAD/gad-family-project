@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, FlatList, Image } from "react-native";
-import { auth, db } from "../lib/firebase";
+import { auth, db } from "../firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
 export default function NFTScreen(){

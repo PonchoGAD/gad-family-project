@@ -1,6 +1,7 @@
 import { View, Text } from "react-native";
-import { nextUnlock } from "../utils/unlock";
+import { nextUnlock } from "../lib/unlock";
 import { TREASURY } from "../config/treasury";
+
 
 function daysBetween(a: Date, b: Date) {
   return Math.ceil((b.getTime() - a.getTime()) / (1000*60*60*24));

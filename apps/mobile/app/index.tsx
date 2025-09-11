@@ -1,3 +1,3 @@
-// пример: заменим один таб на карту
-import FamilyMapScreen from "../../src/screens/FamilyMapScreen";
+// apps/mobile/app/index.tsx
+import FamilyMapScreen from "../src/screens/FamilyMapScreen";
 export default FamilyMapScreen;

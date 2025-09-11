@@ -1,20 +1,38 @@
-import { TREASURY } from "../config/treasury";
+// apps/mobile/src/lib/unlock.ts
+import cfg from "../config/treasury.json";
 
-export function trancheDates(): string[] {
-  const out: string[] = [];
-  const start = new Date(TREASURY.LOCK_START_ISO + "T00:00:00Z");
-  for (let i=1;i<=TREASURY.TRANCHES;i++){
+/**
+ * Строит массив дат анлоков по конфигу.
+ */
+export function buildTranches(
+  lockStartISO = cfg.lockStart,
+  tranches = cfg.tranches,
+  monthsBetween = cfg.monthsBetween
+): string[] {
+  const dates: string[] = [];
+  const start = new Date(lockStartISO);
+  for (let i = 0; i < tranches; i++) {
     const d = new Date(start);
-    d.setUTCMonth(d.getUTCMonth() + TREASURY.MONTHS_BETWEEN * i);
-    out.push(d.toISOString().slice(0,10));
+    d.setMonth(d.getMonth() + i * monthsBetween);
+    dates.push(d.toISOString());
   }
-  return out;
+  return dates;
 }
 
-export function nextUnlock() {
-  const dates = trancheDates();
-  const today = new Date().toISOString().slice(0,10);
-  const next = dates.find(d => d >= today) || null;
-  const idx = next ? dates.indexOf(next) : dates.length-1;
-  return { dates, next, index: idx };
+/**
+ * Возвращает следующую дату анлока + индекс текущего пройденного шага и все даты.
+ */
+export function nextUnlock(nowMs = Date.now()) {
+  const dates = buildTranches();
+  const now = nowMs;
+
+  // найдём первую дату в будущем
+  let idx = dates.findIndex((iso) => new Date(iso).getTime() > now);
+
+  // если все прошли — next = null, index = длина
+  if (idx === -1) {
+    return { next: null as string | null, index: dates.length, dates };
+  }
+
+  return { next: dates[idx], index: idx, dates };
 }

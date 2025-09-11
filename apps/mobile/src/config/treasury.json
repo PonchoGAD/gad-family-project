@@ -1,0 +1,12 @@
+{
+  "address": "GAD_TREASURY",
+  "network": "demo",
+  "lockStart": "2024-01-01T00:00:00.000Z",
+  "tranches": 10,
+  "monthsBetween": 3,
+  "token": "0xGADTOKEN000000000000000000000000000000",
+  "teamFinanceLock": "https://team.finance/lock/abcd1234",
+  "treasurySafe": "0xSAFE_TREASURY_DEMO",
+  "distributionSafe": "0xSAFE_DISTRIBUTION_DEMO",
+  "hotPayoutWallet": "0xHOT_WALLET_DEMO"
+}

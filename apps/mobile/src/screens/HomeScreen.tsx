@@ -1,4 +1,5 @@
-﻿import { View, Text, Button } from "react-native";
+﻿// apps/mobile/src/screens/HomeScreen.tsx
+import { View, Text, Button } from "react-native";
 import { useEffect, useState } from "react";
 import { getAddress } from "../lib/wallet";
 import { TREASURY, getTreasuryBalance } from "../lib/treasury";
@@ -17,7 +18,9 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <View style={{ padding: 24, gap: 12 }}>
-      <Text style={{ fontSize: 16, fontWeight: "700" }}>Welcome to GAD Family</Text>
+      <Text style={{ fontSize: 16, fontWeight: "700" }}>
+        Welcome to GAD Family
+      </Text>
       <Text>User wallet: {addr}</Text>
       <Text>Treasury (GAD Points): {TREASURY}</Text>
       <Text>Treasury balance: {treasury}</Text>

@@ -5,21 +5,31 @@ import { db, auth } from "../firebase";
 import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: false, shouldSetBadge: false }),
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
 });
 
+
 export async function registerForPush() {
-  // iOS: запрос разрешения
-  const { status } = await Notifications.requestPermissionsAsync();
+  // iOS: сначала запросим разрешения
+  const { status } = await Notifications.getPermissionsAsync();
   if (status !== "granted") {
-    console.log("Push permission denied");
-    return null;
+    const r = await Notifications.requestPermissionsAsync();
+    if (r.status !== "granted") {
+      console.log("Push permission denied");
+      return null;
+    }
   }
 
-  // Получаем Expo push token (в Expo Go/Managed)
+  // Получаем Expo push token
   const token = (await Notifications.getExpoPushTokenAsync()).data;
 
-  // Сохраняем у пользователя (как временное поле expoTokens[])
+  // Сохраняем у пользователя
   const uid = auth.currentUser?.uid;
   if (!uid) return token;
 

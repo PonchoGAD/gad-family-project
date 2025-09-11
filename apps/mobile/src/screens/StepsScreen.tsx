@@ -1,7 +1,7 @@
 ﻿import { View, Text, Button, Alert } from "react-native";
 import { Pedometer } from "expo-sensors";
 import { useEffect, useState } from "react";
-import { auth, db } from "../lib/firebase";
+import { auth, db } from "../firebase";
 import { signInAnonymously } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, getDoc, increment, addDoc, collection } from "firebase/firestore";
 import { getAddress } from "../lib/wallet";
