@@ -7,3 +7,7 @@ build
 .env.*
 .firebase
 firebase-debug.log
+_backup_*/
+functions-archive/
+npm-tree.txt
+repo_tree.txt
