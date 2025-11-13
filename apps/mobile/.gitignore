@@ -35,3 +35,8 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+_backup_*/
+functions-archive/
+npm-tree.txt
+repo_tree.txt
