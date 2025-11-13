@@ -1,4 +1,7 @@
 ﻿{
   "files": [],
-  "references": [{ "path": "./functions-app" }]
+  "references": [
+    { "path": "./functions" },
+    { "path": "./apps/mobile" }
+  ]
 }

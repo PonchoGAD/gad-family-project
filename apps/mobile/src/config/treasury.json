@@ -1,12 +1,14 @@
 {
-  "address": "GAD_TREASURY",
-  "network": "demo",
-  "lockStart": "2024-01-01T00:00:00.000Z",
+  "address": "0xe08f53ac892e89b6ba431b90a96c640a39386736",
+  "network": "bsc",
+  "lockStart": "2025-11-24T00:00:00.000Z",
   "tranches": 10,
-  "monthsBetween": 3,
-  "token": "0xGADTOKEN000000000000000000000000000000",
-  "teamFinanceLock": "https://team.finance/lock/abcd1234",
-  "treasurySafe": "0xSAFE_TREASURY_DEMO",
-  "distributionSafe": "0xSAFE_DISTRIBUTION_DEMO",
-  "hotPayoutWallet": "0xHOT_WALLET_DEMO"
+  "monthsBetween": 6,
+  "token": "0x858bab88a5b8d7f29a40380c5f2d8d0b8812fe62",
+  "teamFinanceLock": "0xf40b3de6822837e0c4d937ef20d67b944ae39163",
+  "treasurySafe": "0xe08f53ac892e89b6ba431b90a96c640a39386736",
+  "distributionSafe": "0xe08f53ac892e89b6ba431b90a96c640a39386736",
+  "hotPayoutWallet": "0xa5f7ce6308333f9a596a498dcaaae6d30f1bb094",
+  "vestingVault": "0x9653cb1fc5dad8a384c2dad18a4223b77ecf4a15",
+  "lpLocker": "0xf40b3de6822837e0c4d937ef20d67b944ae39163"
 }

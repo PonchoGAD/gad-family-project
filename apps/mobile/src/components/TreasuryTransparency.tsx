@@ -1,15 +1,18 @@
+// apps/mobile/src/components/TreasuryTransparency.tsx
+import React from "react";
+import { View, Text, Pressable, Linking, ScrollView } from "react-native";
 import cfg from "../config/treasury.json";
 import { buildTranches, nextUnlock } from "../lib/schedule";
 
-const link = (a:string) => `https://bscscan.com/address/${a}`;
-const short = (a:string) => a.slice(0,6)+"…"+a.slice(-4);
+const link = (a: string) => `https://bscscan.com/address/${a}`;
+const short = (a: string) => (a ? a.slice(0, 6) + "…" + a.slice(-4) : "");
 
-export default function TreasuryTransparency(){
+export default function TreasuryTransparency() {
   const dates = buildTranches(cfg.lockStart, cfg.tranches, cfg.monthsBetween);
   const { next, index } = nextUnlock(dates);
   const progress = Math.round((index / cfg.tranches) * 100);
 
-  const rows = [
+  const rows: Array<[string, string]> = [
     ["GAD Token", cfg.token],
     ["TeamFinance Lock", cfg.teamFinanceLock],
     ["Treasury SAFE", cfg.treasurySafe],
@@ -17,41 +20,87 @@ export default function TreasuryTransparency(){
     ["Hot Payout Wallet", cfg.hotPayoutWallet],
   ];
 
+  const open = (addr: string) => {
+    if (!addr) return;
+    Linking.openURL(link(addr)).catch(() => {
+      // ignore / could show alert
+    });
+  };
+
   return (
-    <section style={card}>
-      <h2 style={{margin:0}}>GAD Treasury Transparency</h2>
-      <p style={{opacity:.8, marginTop:8}}>
-        5T locked in TeamFinance. Unlocks: 10 × 500B every {cfg.monthsBetween} months → to Distribution SAFE.
-      </p>
+    <ScrollView
+      style={{
+        marginTop: 16,
+        borderRadius: 12,
+        backgroundColor: "#0b0c10",
+        borderWidth: 1,
+        borderColor: "#1f2330",
+      }}
+      contentContainerStyle={{ padding: 16 }}
+    >
+      <Text style={{ color: "#ffffff", fontSize: 18, fontWeight: "700" }}>
+        GAD Treasury Transparency
+      </Text>
+      <Text style={{ color: "#e5e7eb", marginTop: 8 }}>
+        5T locked in TeamFinance. Unlocks: {cfg.tranches} × 500B every{" "}
+        {cfg.monthsBetween} months → to Distribution SAFE.
+      </Text>
 
-      <div style={barWrap}>
-        <div style={{...barFill, width: `${progress}%`}}/>
-      </div>
-      <p style={{opacity:.8, marginTop:6}}>Completed {index}/{cfg.tranches} • Next unlock: <b>{next ?? "All released"}</b></p>
+      <View
+        style={{
+          height: 10,
+          backgroundColor: "#1f2330",
+          borderRadius: 6,
+          overflow: "hidden",
+          marginTop: 10,
+        }}
+      >
+        <View
+          style={{
+            height: "100%",
+            width: `${progress}%`,
+            backgroundColor: "#4ade80",
+          }}
+        />
+      </View>
+      <Text style={{ color: "#9ca3af", marginTop: 6 }}>
+        Completed {index}/{cfg.tranches} • Next unlock:{" "}
+        <Text style={{ fontWeight: "600" }}>
+          {next ?? "All released"}
+        </Text>
+      </Text>
 
-      <div style={{marginTop:12}}>
-        {rows.map(([label, addr])=>(
-          <div key={label} style={row}>
-            <span style={{opacity:.8}}>{label}</span>
-            <a href={link(addr)} target="_blank" rel="noreferrer" style={a}>
-              {short(addr)}
-            </a>
-          </div>
+      <View style={{ marginTop: 12 }}>
+        {rows.map(([label, addr]) => (
+          <Pressable
+            key={label}
+            onPress={() => open(addr)}
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 6,
+              borderBottomWidth: 1,
+              borderBottomColor: "#1f2330",
+            }}
+          >
+            <Text style={{ color: "#9ca3af" }}>{label}</Text>
+            <Text style={{ color: addr ? "#60a5fa" : "#6b7280" }}>
+              {addr ? short(addr) : "—"}
+            </Text>
+          </Pressable>
         ))}
-      </div>
+      </View>
 
-      <details style={{marginTop:12}}>
-        <summary>Full schedule</summary>
-        <ul>
-          {dates.map((d,i)=> <li key={d}>{i+1}. {d} — 500B</li>)}
-        </ul>
-      </details>
-    </section>
+      <View style={{ marginTop: 12 }}>
+        <Text style={{ color: "#9ca3af", fontSize: 13, marginBottom: 4 }}>
+          Full unlock schedule:
+        </Text>
+        {dates.map((d, i) => (
+          <Text key={d} style={{ color: "#6b7280", fontSize: 12 }}>
+            {i + 1}. {d} — 500B
+          </Text>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
-
-const card: React.CSSProperties = { padding:16, borderRadius:12, background:"#0b0c10", color:"#fff", border:"1px solid #1f2330" };
-const barWrap: React.CSSProperties = { height:10, background:"#1f2330", borderRadius:6, overflow:"hidden", marginTop:8 };
-const barFill: React.CSSProperties = { height:"100%", background:"#4ade80" };
-const row: React.CSSProperties = { display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px dashed #1f2330" };
-const a: React.CSSProperties = { color:"#6aa9ff", textDecoration:"none" };

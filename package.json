@@ -1,20 +1,16 @@
 {
-  "name": "gad-functions",
-  "main": "lib/index.js",
+  "name": "gad-family-app",
   "private": true,
-  "type": "module",
+  "workspaces": ["apps/*", "functions", "web"],
   "scripts": {
-    "build": "tsc",
-    "deploy": "firebase deploy --only functions",
-    "dev": "firebase emulators:start --only functions"
+    "build": "echo \"use per-package build\"",
+    "dev:functions": "cd functions && npm run serve",
+    "dev:mobile": "cd apps/mobile && npx expo start",
+    "deploy:functions": "cd functions && npm run deploy"
   },
-  "dependencies": {
-    "@dataconnect/generated": "file:src/dataconnect-generated",
-    "ethers": "^6.13.0",
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^5.1.1"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.3"
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

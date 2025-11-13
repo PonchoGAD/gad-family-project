@@ -1,28 +1,33 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "jsx": "react-native",
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": [
+      "expo",
+      "expo-router",
       "react",
-      "react-native",
-      "expo"
+      "react-native"
     ],
     "baseUrl": ".",
     "paths": {
       "~/*": [
         "src/*"
+      ],
+      "@dc/*": [
+        "../../src/dataconnect-generated/*"
       ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "index.ts"
+    "index.ts",
+    "app.d.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

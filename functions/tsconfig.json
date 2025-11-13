@@ -1,18 +1,18 @@
+// functions/tsconfig.json
 {
-  "compileOnSave": true,
-  "include": [
-    "src"
-  ],
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "module": "NodeNext",
-    "noImplicitReturns": true,
+    "moduleResolution": "NodeNext",
     "outDir": "lib",
-    "sourceMap": true,
+    "rootDir": "src",
     "strict": true,
-    "target": "es2017",
-    "skipLibCheck": true,
     "esModuleInterop": true,
-    "moduleResolution": "nodenext",
-    "noUnusedLocals": true
-  }
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["src/genkit-sample.ts"]
 }

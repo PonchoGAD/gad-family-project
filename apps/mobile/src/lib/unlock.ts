@@ -1,38 +1,62 @@
 // apps/mobile/src/lib/unlock.ts
-import cfg from "../config/treasury.json";
 
 /**
- * Строит массив дат анлоков по конфигу.
+ * Basic unlock schedule config.
+ * Values can be overridden via ENV to avoid hardcoding.
+ */
+const LOCK_START_ISO =
+  process.env.EXPO_PUBLIC_TREASURY_LOCK_START || "2025-11-24"; // YYYY-MM-DD
+const TRANCHES = Number(
+  process.env.EXPO_PUBLIC_TREASURY_TRANCHES || "6"
+);
+const MONTHS_BETWEEN = Number(
+  process.env.EXPO_PUBLIC_TREASURY_MONTHS_BETWEEN || "6"
+);
+
+/**
+ * Build array of unlock datetimes (full ISO timestamps).
  */
 export function buildTranches(
-  lockStartISO = cfg.lockStart,
-  tranches = cfg.tranches,
-  monthsBetween = cfg.monthsBetween
+  lockStartISO: string = LOCK_START_ISO,
+  tranches: number = TRANCHES,
+  monthsBetween: number = MONTHS_BETWEEN
 ): string[] {
   const dates: string[] = [];
-  const start = new Date(lockStartISO);
+  const start = new Date(lockStartISO + "T00:00:00Z");
+
   for (let i = 0; i < tranches; i++) {
     const d = new Date(start);
-    d.setMonth(d.getMonth() + i * monthsBetween);
+    d.setUTCMonth(d.getUTCMonth() + i * monthsBetween);
     dates.push(d.toISOString());
   }
+
   return dates;
 }
 
 /**
- * Возвращает следующую дату анлока + индекс текущего пройденного шага и все даты.
+ * Returns next unlock date (full ISO) + index and full schedule.
  */
-export function nextUnlock(nowMs = Date.now()) {
+export function nextUnlock(nowMs: number = Date.now()) {
   const dates = buildTranches();
   const now = nowMs;
 
-  // найдём первую дату в будущем
-  let idx = dates.findIndex((iso) => new Date(iso).getTime() > now);
+  // find first future unlock
+  let idx = dates.findIndex(
+    (iso) => new Date(iso).getTime() > now
+  );
 
-  // если все прошли — next = null, index = длина
+  // all tranches passed
   if (idx === -1) {
-    return { next: null as string | null, index: dates.length, dates };
+    return {
+      next: null as string | null,
+      index: dates.length,
+      dates,
+    };
   }
 
-  return { next: dates[idx], index: idx, dates };
+  return {
+    next: dates[idx],
+    index: idx,
+    dates,
+  };
 }

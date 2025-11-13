@@ -1,109 +1,133 @@
-"use client";
-import React from "react";
+// apps/mobile/src/components/LiquidityPoolWidget.tsx
+import React, { useEffect, useState, useMemo } from "react";
+import { View, Text, TextInput, Button, Alert, Linking } from "react-native";
 
 type LiquidityPoolWidgetProps = {
-  defaultPairAddress?: string; // 0x... pair on BSC
+  defaultPairAddress?: string; // BSC LP pair (0x...)
   defaultTab?: "dex" | "gecko";
 };
+
+const isValidPair = (v: string) => /^0x[a-fA-F0-9]{40}$/.test(v.trim());
+
+function buildDexUrl(pair: string, tab: "dex" | "gecko"): string {
+  const p = pair.trim();
+  if (!isValidPair(p)) return "";
+  if (tab === "dex") {
+    return `https://dexscreener.com/bsc/${p}?embed=1&theme=dark`;
+  }
+  return `https://www.geckoterminal.com/bsc/pools/${p}?embed=1&info=1&swaps=1`;
+}
 
 export default function LiquidityPoolWidget({
   defaultPairAddress = "",
   defaultTab = "dex",
 }: LiquidityPoolWidgetProps) {
-  const PAIR_KEY = "gad_lp_pair_bsc";
-  const TAB_KEY  = "gad_lp_tab";
+  const [pair, setPair] = useState<string>(defaultPairAddress);
+  const [input, setInput] = useState<string>(defaultPairAddress);
+  const [tab, setTab] = useState<"dex" | "gecko">(defaultTab);
 
-  const [pair, setPair] = React.useState<string>("");
-  const [tab, setTab]   = React.useState<"dex" | "gecko">(defaultTab);
+  useEffect(() => {
+    setPair(defaultPairAddress);
+    setInput(defaultPairAddress);
+  }, [defaultPairAddress]);
 
-  React.useEffect(()=>{
-    const savedPair = localStorage.getItem(PAIR_KEY) || defaultPairAddress || "";
-    const savedTab  = (localStorage.getItem(TAB_KEY) as "dex"|"gecko") || defaultTab;
-    setPair(savedPair);
-    setTab(savedTab);
-  }, [defaultPairAddress, defaultTab]);
+  const url = useMemo(() => buildDexUrl(pair, tab), [pair, tab]);
 
-  React.useEffect(()=>{
-    localStorage.setItem(PAIR_KEY, pair);
-  }, [pair]);
+  const applyPair = () => {
+    if (!isValidPair(input)) {
+      Alert.alert("Invalid address", "Please paste a valid BSC pair address (0x...).");
+      return;
+    }
+    setPair(input.trim());
+  };
 
-  React.useEffect(()=>{
-    localStorage.setItem(TAB_KEY, tab);
-  }, [tab]);
-
-  const [input, setInput] = React.useState("");
-
-  React.useEffect(()=>{ setInput(pair); }, [pair]);
-
-  const valid = (v:string) => /^0x[a-fA-F0-9]{40}$/.test(v.trim());
-
-  const src = React.useMemo(()=>{
-    if(!valid(pair)) return "about:blank";
-    return tab === "dex"
-      ? `https://dexscreener.com/bsc/${pair}?embed=1&theme=dark`
-      : `https://www.geckoterminal.com/bsc/pools/${pair}?embed=1&info=1&swaps=1`;
-  }, [pair, tab]);
+  const openInBrowser = () => {
+    if (!url) {
+      Alert.alert("Pair not set", "Set a valid pair address first.");
+      return;
+    }
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Error", "Failed to open browser for this URL.");
+    });
+  };
 
   return (
-    <div className="card" style={{marginTop:12}}>
-      <div className="row" style={{justifyContent:"space-between", alignItems:"center"}}>
-        <h2 style={{margin:0}}>Liquidity Pool</h2>
-        <div className="tabs" role="tablist">
-          <button
-            className={`tab ${tab==="dex"?"tabActive":""}`}
-            onClick={()=>setTab("dex")}
-            aria-selected={tab==="dex"}
-          >
-            DexScreener
-          </button>
-          <button
-            className={`tab ${tab==="gecko"?"tabActive":""}`}
-            onClick={()=>setTab("gecko")}
-            aria-selected={tab==="gecko"}
-          >
-            GeckoTerminal
-          </button>
-        </div>
-      </div>
+    <View
+      style={{
+        marginTop: 16,
+        padding: 16,
+        borderRadius: 12,
+        backgroundColor: "#101114",
+        borderWidth: 1,
+        borderColor: "#1f2933",
+      }}
+    >
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ color: "#ffffff", fontSize: 16, fontWeight: "700" }}>
+          Liquidity Pool
+        </Text>
 
-      <div className="row" style={{marginTop:10, gap:8}}>
-        <input
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Button
+            title="DexScreener"
+            onPress={() => setTab("dex")}
+            color={tab === "dex" ? "#3b82f6" : "#4b5563"}
+          />
+          <Button
+            title="GeckoTerminal"
+            onPress={() => setTab("gecko")}
+            color={tab === "gecko" ? "#3b82f6" : "#4b5563"}
+          />
+        </View>
+      </View>
+
+      <View style={{ marginTop: 12 }}>
+        <Text style={{ color: "#9ca3af", marginBottom: 4 }}>BSC pair address (0x...)</Text>
+        <TextInput
           value={input}
-          onChange={(e)=>setInput(e.target.value)}
-          placeholder="Paste BSC pair address (0x...)"
-          className="kbd"
-          style={{width:"360px", maxWidth:"100%"}}
-        />
-        <button
-          className="btn"
-          onClick={()=>{
-            if(!valid(input)){ alert("Please paste a valid BSC pair address (0x...)"); return; }
-            setPair(input.trim());
+          onChangeText={setInput}
+          placeholder="Paste PancakeSwap LP pair address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{
+            borderWidth: 1,
+            borderColor: "#374151",
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            color: "#e5e7eb",
           }}
-        >
-          Set Pair
-        </button>
-        <span className="muted" style={{fontSize:13}}>
-          Example: PancakeSwap pool address (BSC). Saved locally.
-        </span>
-      </div>
+        />
+        <View style={{ flexDirection: "row", marginTop: 8, gap: 8 }}>
+          <Button title="Set Pair" onPress={applyPair} />
+          <Button title="Open in Browser" onPress={openInBrowser} />
+        </View>
+        <Text style={{ color: "#6b7280", fontSize: 12, marginTop: 6 }}>
+          After you create a pool on PancakeSwap, copy the pair address and set it here to open live charts.
+        </Text>
+      </View>
 
-      <div className="hr" />
-
-      <div style={{width:"100%", aspectRatio:"16 / 9", background:"#0f1317", border:"1px solid #25303a", borderRadius:12, overflow:"hidden"}}>
-        {src==="about:blank" ? (
-          <div style={{display:"grid", placeItems:"center", height:"100%", color:"#a3b1c2", fontSize:14}}>
-            Paste your <b>pair address</b> and click <b>Set Pair</b> to load the live widget.
-          </div>
-        ) : (
-          <iframe src={src} width="100%" height="100%" style={{border:0}} loading="lazy" />
-        )}
-      </div>
-
-      <p className="muted" style={{marginTop:8, fontSize:13}}>
-        💡 After you create a pool on PancakeSwap, copy the <strong>pair address</strong> and set it above.
-        The widget displays price, liquidity, volume, and a live chart.
-      </p>
-    </div>
+      <View
+        style={{
+          marginTop: 16,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#0b0c10",
+        }}
+      >
+        <Text style={{ color: "#9ca3af", fontSize: 12 }}>
+          Selected tab:{" "}
+          <Text style={{ fontWeight: "600", color: "#e5e7eb" }}>
+            {tab === "dex" ? "DexScreener" : "GeckoTerminal"}
+          </Text>
+        </Text>
+        <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
+          Current pair:{" "}
+          <Text style={{ color: isValidPair(pair) ? "#4ade80" : "#f97316" }}>
+            {pair || "not set"}
+          </Text>
+        </Text>
+      </View>
+    </View>
   );
 }

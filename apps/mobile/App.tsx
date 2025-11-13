@@ -1,10 +1,13 @@
 ﻿// apps/mobile/App.tsx
+import "react-native-get-random-values"; // crypto polyfill для ethers
 import * as Linking from "expo-linking";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { View, Text } from "react-native";
+
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
 import StepsScreen from "./src/screens/StepsScreen";
@@ -60,6 +63,25 @@ function TabsRoot() {
   );
 }
 
+// Simple placeholder so navigation("WalletOnboarding") does not crash
+function WalletOnboardingScreen() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <Text style={{ fontSize: 22, fontWeight: "700" }}>Wallet Onboarding</Text>
+      <Text style={{ marginTop: 8, color: "#555", textAlign: "center" }}>
+        Placeholder. Screen is registered to keep navigation stable.
+      </Text>
+    </View>
+  );
+}
+
 const linking: any = {
   prefixes: [Linking.createURL("/")],
   config: {
@@ -76,6 +98,8 @@ const linking: any = {
       Steps: "steps",
       NFTs: "nfts",
       FamilyTreasury: "treasury",
+      FamilyChildren: "children",
+      WalletOnboarding: "wallet-onboarding",
     },
   },
 };
@@ -111,6 +135,11 @@ export default function App() {
               name="FamilyChildren"
               component={FamilyChildrenScreen}
               options={{ headerShown: true, title: "Children" }}
+            />
+            <Stack.Screen
+              name="WalletOnboarding"
+              component={WalletOnboardingScreen}
+              options={{ headerShown: true, title: "Wallet Onboarding" }}
             />
           </Stack.Navigator>
         </SafeAreaView>
