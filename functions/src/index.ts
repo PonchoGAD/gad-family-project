@@ -5,6 +5,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { ethers } from "ethers";
+export { assistantChat } from "./assistant.js";
 
 import { runDailyDryRun } from "./step-engine.js";
 import { US_REGIONS, PUBLIC_TREASURY_CONFIG, TreasuryPublic } from "./config.js";

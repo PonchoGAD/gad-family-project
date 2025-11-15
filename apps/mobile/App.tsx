@@ -14,7 +14,7 @@ import { ensureUserDoc } from "./src/lib/user";
 import FamilyTasksScreen from "./src/screens/FamilyTasksScreen";
 import FamilyChatListScreen from "./src/screens/FamilyChatListScreen";
 import FamilyChatScreen from "./src/screens/FamilyChatScreen";
-
+import AssistantScreen from "./src/screens/AssistantScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
 import StepsScreen from "./src/screens/StepsScreen";
@@ -169,6 +169,11 @@ export default function App() {
             <Stack.Screen 
                name="FamilyChat" 
                component={FamilyChatScreen} 
+            />
+            <Stack.Screen
+               name="Assistant"
+               component={AssistantScreen}
+               options={{ headerShown: true, title: "AI Assistant" }}
             />
             <Stack.Screen
               name="WalletOnboarding"
