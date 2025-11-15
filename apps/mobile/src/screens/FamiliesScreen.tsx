@@ -34,6 +34,7 @@ export default function FamiliesScreen({ navigation }: any) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [familyOwnerUid, setFamilyOwnerUid] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +43,7 @@ export default function FamiliesScreen({ navigation }: any) {
 
     (async () => {
       try {
-        // 1) гарантируем, что есть user
+        // 1) ensure we have a user
         let user = auth.currentUser;
         if (!user) {
           const res = await signInAnonymously(auth);
@@ -50,7 +51,7 @@ export default function FamiliesScreen({ navigation }: any) {
         }
         setUid(user.uid);
 
-        // 2) ensure users/{uid}
+        // 2) ensure users/{uid} exists
         const uRef = doc(db, "users", user.uid);
         const uSnap = await getDoc(uRef);
         if (!uSnap.exists()) {
@@ -68,11 +69,18 @@ export default function FamiliesScreen({ navigation }: any) {
         const fid: string | null = data.familyId ?? null;
         setMyFamilyId(fid);
 
-        // 3) если есть семья — подтягиваем её и подписываемся на членов
+        // 3) if there is a family — load it and subscribe to members
         if (fid) {
           const famRef = doc(db, "families", fid);
           const famSnap = await getDoc(famRef);
-          setInviteCode((famSnap.data() as any)?.inviteCode ?? null);
+          if (famSnap.exists()) {
+            const famData = famSnap.data() as any;
+            setInviteCode(famData?.inviteCode ?? null);
+            setFamilyOwnerUid(famData?.ownerUid ?? null);
+          } else {
+            setInviteCode(null);
+            setFamilyOwnerUid(null);
+          }
 
           const mCol = collection(db, "families", fid, "members");
           unsubMembers = onSnapshot(mCol, (snap) => {
@@ -84,6 +92,7 @@ export default function FamiliesScreen({ navigation }: any) {
           });
         } else {
           setInviteCode(null);
+          setFamilyOwnerUid(null);
           setMembers([]);
         }
       } catch (e: any) {
@@ -108,7 +117,7 @@ export default function FamiliesScreen({ navigation }: any) {
       const trimmed = name.trim();
       if (!trimmed) return;
 
-      // auto-id семьи
+      // auto-generated family id
       const famRef = doc(collection(db, "families"));
       const fid = famRef.id;
       const invite = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -124,7 +133,7 @@ export default function FamiliesScreen({ navigation }: any) {
         { merge: true }
       );
 
-      // участник-родитель
+      // member: parent role
       await setDoc(
         doc(db, "families", fid, "members", uid),
         {
@@ -134,7 +143,7 @@ export default function FamiliesScreen({ navigation }: any) {
         { merge: true }
       );
 
-      // привязываем к пользователю
+      // link family to user
       await setDoc(
         doc(db, "users", uid),
         { familyId: fid },
@@ -143,6 +152,7 @@ export default function FamiliesScreen({ navigation }: any) {
 
       setMyFamilyId(fid);
       setInviteCode(invite);
+      setFamilyOwnerUid(uid);
       Alert.alert("Family created", `Invite code: ${invite}`);
     } catch (e: any) {
       console.log("createFamily error", e);
@@ -171,6 +181,7 @@ export default function FamiliesScreen({ navigation }: any) {
 
       const famDoc = qs.docs[0];
       const fid = famDoc.id;
+      const famData = famDoc.data() as any;
 
       await setDoc(
         doc(db, "families", fid, "members", uid),
@@ -187,7 +198,8 @@ export default function FamiliesScreen({ navigation }: any) {
       );
 
       setMyFamilyId(fid);
-      setInviteCode((famDoc.data() as any)?.inviteCode ?? trimmed);
+      setInviteCode(famData?.inviteCode ?? trimmed);
+      setFamilyOwnerUid(famData?.ownerUid ?? null);
       Alert.alert("Joined", `Family ID: ${fid}`);
     } catch (e: any) {
       console.log("joinFamily error", e);
@@ -204,6 +216,28 @@ export default function FamiliesScreen({ navigation }: any) {
       console.log("share invite error", e);
     }
   }
+
+  async function handleBecomeOwner() {
+    try {
+      if (!uid || !myFamilyId) {
+        Alert.alert("Error", "No family");
+        return;
+      }
+      await setDoc(
+        doc(db, "families", myFamilyId),
+        { ownerUid: uid },
+        { merge: true }
+      );
+      setFamilyOwnerUid(uid);
+      Alert.alert("Family owner updated", "You are now the Family Owner");
+    } catch (e: any) {
+      console.log("becomeOwner error", e);
+      Alert.alert("Error", e?.message ?? "Failed to update owner");
+    }
+  }
+
+  const isOwner =
+    uid != null && familyOwnerUid != null && uid === familyOwnerUid;
 
   return (
     <View
@@ -224,7 +258,7 @@ export default function FamiliesScreen({ navigation }: any) {
         Families
       </Text>
 
-      {/* Основная карточка семьи */}
+      {/* Main family card */}
       <View
         style={{
           borderRadius: 12,
@@ -239,6 +273,14 @@ export default function FamiliesScreen({ navigation }: any) {
         </Text>
         <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
           Invite code: {inviteCode ?? "—"}
+        </Text>
+        <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
+          Family owner:{" "}
+          {familyOwnerUid
+            ? familyOwnerUid === uid
+              ? "You"
+              : `${familyOwnerUid.slice(0, 6)}…`
+            : "Not set"}
         </Text>
 
         <TouchableOpacity
@@ -255,6 +297,12 @@ export default function FamiliesScreen({ navigation }: any) {
             Share invite
           </Text>
         </TouchableOpacity>
+
+        {!isOwner && myFamilyId && uid && (
+          <View style={{ marginTop: 8 }}>
+            <Button title="Make me Family Owner" onPress={handleBecomeOwner} />
+          </View>
+        )}
 
         <View
           style={{
@@ -277,7 +325,7 @@ export default function FamiliesScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Создать семью */}
+      {/* Create family */}
       <View
         style={{
           borderRadius: 12,
@@ -313,7 +361,7 @@ export default function FamiliesScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Присоединиться по коду */}
+      {/* Join by code */}
       <View
         style={{
           borderRadius: 12,
@@ -350,7 +398,7 @@ export default function FamiliesScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Участники */}
+      {/* Members */}
       <View
         style={{
           flex: 1,

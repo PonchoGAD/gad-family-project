@@ -18,26 +18,25 @@ type DailyReward = {
 };
 
 export default function RewardsScreen() {
-  // Баланс очков (если используется коллекция balances/*)
+  // Points balance
   const [points, setPoints] = useState<number>(0);
 
-  // Сегодня и последние дни (dry-run по дате)
+  // Today + recent days
   const [today, setToday] = useState<DailyReward | null>(null);
   const [recent, setRecent] = useState<DailyReward[]>([]);
   const [summary, setSummary] = useState<{ lastDate?: string; lastGadPreview?: string } | null>(null);
 
-  // Доп. лента последних дней (по updatedAt, до 30 записей) — для совместимости со старой разметкой
+  // Compatibility: list sorted by updatedAt (up to 30)
   const [days, setDays] = useState<Array<{ id: string; points?: number; steps?: number }>>([]);
 
-  // UID: авторизованный или демо
   const uid = auth.currentUser?.uid ?? "demo-uid";
 
   useEffect(() => {
-    // Баланс очков
+    // Points balance
     const bRef = doc(db, "balances", uid);
     const unsub1 = onSnapshot(bRef, (snap) => setPoints((snap.data()?.pointsTotal ?? 0) as number));
 
-    // Последние 7 дней по полю date (для Today/Recent)
+    // Last 7 days (by date)
     const dRefByDate = collection(db, "rewards", uid, "days");
     const unsub2 = onSnapshot(query(dRefByDate, orderBy("date", "desc"), limit(7)), (qs) => {
       const rows: DailyReward[] = qs.docs.map((d) => d.data() as DailyReward);
@@ -45,13 +44,13 @@ export default function RewardsScreen() {
       setToday(rows[0] ?? null);
     });
 
-    // Сводка — ЧИТАЕМ ИЗ rewards/{uid} (не из rewards/{uid}/summary)
+    // Summary
     const sRef = doc(db, "rewards", uid);
     const unsub3 = onSnapshot(sRef, (d) => {
       setSummary((d.exists() ? (d.data() as any) : null) as any);
     });
 
-    // Доп. список по updatedAt (до 30)
+    // UpdatedAt list (up to 30)
     const dRefByUpdated = collection(db, "rewards", uid, "days");
     const unsub4 = onSnapshot(query(dRefByUpdated, orderBy("updatedAt", "desc"), limit(30)), (qs) =>
       setDays(qs.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
@@ -67,7 +66,6 @@ export default function RewardsScreen() {
 
   async function runDry() {
     try {
-      // Callable: ручной прогон Step Engine (dry-run)
       const call = fn<unknown, { ok: boolean; processed: number; date: string }>("stepEngineRunNow");
       const res = await call({});
       console.log("runDry", res.data);
@@ -78,7 +76,7 @@ export default function RewardsScreen() {
 
   return (
     <ScrollView style={{ padding: 16 }}>
-      {/* Баланс очков */}
+      {/* Points balance */}
       <View style={{ marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: "#121319" }}>
         <Text style={{ color: "#fff", fontWeight: "700", fontSize: 18 }}>GAD Points</Text>
         <Text style={{ color: "#aaa", marginTop: 6 }}>
@@ -86,48 +84,48 @@ export default function RewardsScreen() {
         </Text>
       </View>
 
-      {/* Сегодня */}
+      {/* Today */}
       <View style={{ marginTop: 4, padding: 12, borderRadius: 10, backgroundColor: "#121319" }}>
-        <Text style={{ color: "#ccc" }}>Сегодня</Text>
+        <Text style={{ color: "#ccc" }}>Today</Text>
         {today ? (
           <View>
             <Text style={{ color: "#fff", marginTop: 4 }}>
               {today.date} • {today.subscription.toUpperCase()}
             </Text>
             <Text style={{ color: "#aaa", marginTop: 4 }}>
-              Шаги: {today.stepsCounted} • Множ: ×{today.multiplier} • Ставка: {today.rateDay}
+              Steps: {today.stepsCounted} • Multiplier: ×{today.multiplier} • Rate: {today.rateDay}
             </Text>
             <Text style={{ color: "#4ade80", marginTop: 4 }}>
-              Предпросмотр GAD: {today.gadEarned}
+              GAD preview: {today.gadEarned}
             </Text>
           </View>
         ) : (
-          <Text style={{ color: "#888", marginTop: 4 }}>Нет данных за сегодня</Text>
+          <Text style={{ color: "#888", marginTop: 4 }}>No data for today</Text>
         )}
       </View>
 
-      {/* Сводка */}
+      {/* Summary */}
       <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#121319" }}>
-        <Text style={{ color: "#ccc" }}>Итоги</Text>
+        <Text style={{ color: "#ccc" }}>Summary</Text>
         <Text style={{ color: "#aaa", marginTop: 4 }}>
-          Последняя дата: {summary?.lastDate ?? "—"} • Предпросмотр: {summary?.lastGadPreview ?? "—"}
+          Last date: {summary?.lastDate ?? "—"} • Preview: {summary?.lastGadPreview ?? "—"}
         </Text>
       </View>
 
-      {/* Последние дни (по date) */}
+      {/* Last days (by date) */}
       <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#121319" }}>
-        <Text style={{ color: "#ccc" }}>Последние дни</Text>
+        <Text style={{ color: "#ccc" }}>Recent days</Text>
         {recent.map((r) => (
           <View key={r.date} style={{ marginTop: 8 }}>
             <Text style={{ color: "#fff" }}>{r.date}</Text>
             <Text style={{ color: "#aaa" }}>
-              {r.stepsCounted} шагов • множ {r.multiplier} • ставка {r.rateDay} → {r.gadEarned} GAD
+              {r.stepsCounted} steps • mult {r.multiplier} • rate {r.rateDay} → {r.gadEarned} GAD
             </Text>
           </View>
         ))}
       </View>
 
-      {/* Совместимость: список по updatedAt (до 30) */}
+      {/* Compatibility list */}
       <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#121319" }}>
         <Text style={{ color: "#ccc" }}>Recent days (by updatedAt)</Text>
         {days.length ? (

@@ -1,5 +1,6 @@
 ﻿// apps/mobile/App.tsx
 import "react-native-get-random-values"; // crypto polyfill для ethers
+import "react-native-url-polyfill/auto";
 import * as Linking from "expo-linking";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -7,6 +8,9 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
+import React, { useEffect } from "react";
+import { ensureAuth } from "./src/lib/authClient";
+import { ensureUserDoc } from "./src/lib/user";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
@@ -110,6 +114,19 @@ const navTheme = {
 };
 
 export default function App() {
+    useEffect(() => {
+    (async () => {
+      try {
+        const u = await ensureAuth();
+        if (u) {
+          await ensureUserDoc(); // создаём users/{uid}, если нет
+        }
+      } catch (e) {
+        console.log("Auth init error", e);
+      }
+    })();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer linking={linking} theme={navTheme}>

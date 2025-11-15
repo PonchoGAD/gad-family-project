@@ -11,3 +11,7 @@ _backup_*/
 functions-archive/
 npm-tree.txt
 repo_tree.txt
+.env*.local
+.env.development
+.env.example
+

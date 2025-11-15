@@ -32,6 +32,7 @@ export default function FamilyChildrenScreen() {
         }
         const uid = user.uid;
 
+        // Load familyId from users/{uid}
         const uSnap = await getDoc(doc(db, "users", uid));
         const familyId = (uSnap.data() as any)?.familyId ?? null;
         setFid(familyId);
@@ -41,13 +42,16 @@ export default function FamilyChildrenScreen() {
           return;
         }
 
+        // FamilyVault: locked balances stored in families/{fid}/vaultMembers/{uid}
         const snap = await getDocs(
-          collection(db, "families", familyId, "vault", "locked")
+          collection(db, "families", familyId, "vaultMembers")
         );
+
         const arr: LockedItem[] = snap.docs.map((d) => ({
           uid: d.id,
           locked: (d.data()?.pointsLocked ?? 0) as number,
         }));
+
         setItems(arr);
       } catch (e: any) {
         console.log("FamilyChildren init error", e);
@@ -63,17 +67,21 @@ export default function FamilyChildrenScreen() {
       if (!fid) return;
       if (!points || points <= 0) return;
 
+      // Decrease locked in families/{fid}/vaultMembers/{childUid}
       await setDoc(
-        doc(db, "families", fid, "vault", "locked", childUid),
+        doc(db, "families", fid, "vaultMembers", childUid),
         { pointsLocked: increment(-points) },
         { merge: true }
       );
+
+      // Increase personal balance in balances/{childUid}
       await setDoc(
         doc(db, "balances", childUid),
         { pointsTotal: increment(points) },
         { merge: true }
       );
-      Alert.alert("Done", `Released ${points} points to personal balance`);
+
+      Alert.alert("Success", `Released ${points} points to personal balance`);
     } catch (e: any) {
       console.log("releaseToPersonal error", e);
       Alert.alert("Error", e?.message ?? "Failed to release points");

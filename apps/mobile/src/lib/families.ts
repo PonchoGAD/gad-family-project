@@ -22,6 +22,14 @@ export type FamilyMember = {
   lastLocation?: { lat: number; lng: number };
 };
 
+export type Family = {
+  id: string;
+  name?: string;
+  ownerUid?: string | null;
+  inviteCode?: string | null;
+  createdAt?: any;
+};
+
 /**
  * Create a new family and attach current user as owner + member.
  */
@@ -95,8 +103,38 @@ export async function joinFamilyByCode(code: string) {
 export async function getFamily(fid: string) {
   const snap = await getDoc(doc(db, "families", fid));
   return snap.exists()
-    ? { id: fid, ...(snap.data() as any) }
+    ? ({ id: fid, ...(snap.data() as any) } as Family)
     : null;
+}
+
+/**
+ * Get current user's familyId from users/{uid}.
+ */
+export async function getCurrentUserFamilyId() {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+
+  const uSnap = await getDoc(doc(db, "users", uid));
+  if (!uSnap.exists()) return null;
+  const data = uSnap.data() as any;
+  return (data.familyId as string | undefined) ?? null;
+}
+
+/**
+ * Subscribe to family document in real time.
+ */
+export function subscribeFamily(
+  fid: string,
+  cb: (family: Family | null) => void
+) {
+  const ref = doc(db, "families", fid);
+  return onSnapshot(ref, (snap) => {
+    if (!snap.exists()) {
+      cb(null);
+      return;
+    }
+    cb({ id: fid, ...(snap.data() as any) } as Family);
+  });
 }
 
 /**
@@ -113,6 +151,18 @@ export function subscribeMembers(
     );
     cb(items);
   });
+}
+
+/**
+ * Set / change family owner (client-side helper).
+ * Сейчас опирается на Firestore rules, которые разрешают запись.
+ */
+export async function setFamilyOwner(fid: string, ownerUid: string) {
+  await setDoc(
+    doc(db, "families", fid),
+    { ownerUid: ownerUid },
+    { merge: true }
+  );
 }
 
 /**

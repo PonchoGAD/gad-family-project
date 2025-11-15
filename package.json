@@ -1,7 +1,11 @@
 {
   "name": "gad-family-app",
   "private": true,
-  "workspaces": ["apps/*", "functions", "web"],
+  "workspaces": [
+    "apps/*",
+    "functions",
+    "web"
+  ],
   "scripts": {
     "build": "echo \"use per-package build\"",
     "dev:functions": "cd functions && npm run serve",
@@ -12,5 +16,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5"
+  },
+  "dependencies": {
+    "expo-sensors": "~15.0.7"
   }
 }

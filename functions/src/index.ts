@@ -1,4 +1,5 @@
 import { setGlobalOptions } from "firebase-functions/v2";
+import { familySetOwner, familyGetInfo } from "./family-vault.js";
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
@@ -328,3 +329,5 @@ export const adminDoApprove = onCall(
     return { ok: true, hash: tx.hash };
   }
 );
+
+export { familySetOwner, familyGetInfo };

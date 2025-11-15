@@ -1,4 +1,5 @@
 ﻿// apps/mobile/src/lib/wallet.ts
+import "react-native-get-random-values"
 import * as SecureStore from "expo-secure-store";
 import { ethers } from "ethers";
 import { getProvider } from "./chains";
