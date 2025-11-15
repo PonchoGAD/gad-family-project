@@ -11,6 +11,7 @@ import { View, Text } from "react-native";
 import React, { useEffect } from "react";
 import { ensureAuth } from "./src/lib/authClient";
 import { ensureUserDoc } from "./src/lib/user";
+import FamilyTasksScreen from "./src/screens/FamilyTasksScreen";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
@@ -143,6 +144,12 @@ export default function App() {
               component={NFTScreen}
               options={{ headerShown: true, title: "My NFTs" }}
             />
+            <Stack.Screen
+  name="FamilyTasks"
+  component={FamilyTasksScreen}
+  options={{ headerShown: true, title: "Family Tasks" }}
+/>
+
             <Stack.Screen
               name="FamilyTreasury"
               component={FamilyTreasuryScreen}

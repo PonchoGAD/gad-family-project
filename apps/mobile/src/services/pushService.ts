@@ -35,3 +35,17 @@ export async function registerForPush() {
 
   return token;
 }
+
+/**
+ * Заглушка для семейных пуш-уведомлений.
+ * Сейчас просто пишет в консоль, позже подключим FCM + Cloud Functions.
+ */
+export async function sendFamilyNotification(
+  fid: string,
+  payload: { title: string; body: string; data?: Record<string, any> }
+) {
+  console.log("[Mock push] family:", fid, payload);
+  // TODO: позже:
+  // - читать expoTokens всех членов семьи
+  // - дергать Cloud Function / FCM для реальной рассылки
+}

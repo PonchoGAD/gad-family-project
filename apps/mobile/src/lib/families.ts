@@ -15,6 +15,10 @@ import {
 } from "firebase/firestore";
 import * as Linking from "expo-linking";
 import { Share } from "react-native";
+import {
+  listenToFamilyTasksConverter,
+  FamilyTask,
+} from "../types/tasks";
 
 export type FamilyMember = {
   id: string;
@@ -183,4 +187,54 @@ export async function shareInviteLink(inviteCode: string) {
     message: `Join our family in GAD Family\nInvite code: ${inviteCode}\n${url}`,
   });
   return url;
+}
+
+
+/**
+ * Listener на список задач семьи
+ */
+export function listenFamilyTasks(
+  fid: string,
+  cb: (items: any[]) => void
+) {
+  const coll = collection(doc(db, "families", fid), "tasks");
+  return onSnapshot(coll, (snap) => {
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    cb(items);
+  });
+}
+
+export async function createFamilyTask(
+  fid: string,
+  data: {
+    title: string;
+    description?: string;
+    createdBy: string;
+    assignedTo?: string[];
+    status?: "open" | "done";
+  }
+) {
+  const taskRef = doc(collection(db, "families", fid, "tasks"));
+  await setDoc(
+    taskRef,
+    {
+      ...data,
+      status: data.status ?? "open",
+      createdAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return taskRef.id;
+}
+
+export async function toggleFamilyTask(
+  fid: string,
+  taskId: string,
+  status: "open" | "done"
+) {
+  await setDoc(
+    doc(db, "families", fid, "tasks", taskId),
+    { status },
+    { merge: true }
+  );
 }

@@ -322,6 +322,12 @@ export default function FamiliesScreen({ navigation }: any) {
             onPress={() => navigation.navigate("FamilyChildren")}
             disabled={!myFamilyId}
           />
+          <Button
+  title="Family Tasks"
+  onPress={() => navigation.navigate("FamilyTasks")}
+  disabled={!myFamilyId}
+/>
+
         </View>
       </View>
 
