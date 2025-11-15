@@ -318,6 +318,12 @@ export default function FamiliesScreen({ navigation }: any) {
             disabled={!myFamilyId}
           />
           <Button
+  title="Family Chats"
+  onPress={() => navigation.navigate("FamilyChatList")}
+  disabled={!myFamilyId}
+/>
+
+          <Button
             title="Children & locked"
             onPress={() => navigation.navigate("FamilyChildren")}
             disabled={!myFamilyId}

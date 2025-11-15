@@ -12,6 +12,8 @@ import React, { useEffect } from "react";
 import { ensureAuth } from "./src/lib/authClient";
 import { ensureUserDoc } from "./src/lib/user";
 import FamilyTasksScreen from "./src/screens/FamilyTasksScreen";
+import FamilyChatListScreen from "./src/screens/FamilyChatListScreen";
+import FamilyChatScreen from "./src/screens/FamilyChatScreen";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import WalletScreen from "./src/screens/WalletScreen";
@@ -159,6 +161,14 @@ export default function App() {
               name="FamilyChildren"
               component={FamilyChildrenScreen}
               options={{ headerShown: true, title: "Children" }}
+            />
+            <Stack.Screen 
+               name="FamilyChatList"
+               component={FamilyChatListScreen} 
+            />
+            <Stack.Screen 
+               name="FamilyChat" 
+               component={FamilyChatScreen} 
             />
             <Stack.Screen
               name="WalletOnboarding"
