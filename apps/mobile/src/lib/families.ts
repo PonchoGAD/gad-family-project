@@ -19,11 +19,23 @@ import {
   listenToFamilyTasksConverter,
   FamilyTask,
 } from "../types/tasks";
+import { distanceM } from "./geo";
 
 export type FamilyMember = {
   id: string;
   joinedAt?: any;
   lastLocation?: { lat: number; lng: number };
+};
+
+export type FamilyLocation = {
+  lat: number;
+  lng: number;
+  city?: string;
+  country?: string;
+};
+
+export type FamilyChildProfile = {
+  age?: number;
 };
 
 export type Family = {
@@ -32,6 +44,11 @@ export type Family = {
   ownerUid?: string | null;
   inviteCode?: string | null;
   createdAt?: any;
+
+  location?: FamilyLocation | null;
+  children?: FamilyChildProfile[];
+  interests?: string[];
+  findFriendsEnabled?: boolean;
 };
 
 /**
@@ -51,6 +68,8 @@ export async function createFamily(name: string) {
     ownerUid: uid,
     inviteCode,
     createdAt: serverTimestamp(),
+    findFriendsEnabled: false,
+    interests: [],
   });
 
   await setDoc(
@@ -69,7 +88,7 @@ export async function createFamily(name: string) {
 }
 
 /**
- * Join family by invite code (case-insensitive).
+ * Join family by invite code
  */
 export async function joinFamilyByCode(code: string) {
   const uid = auth.currentUser?.uid;
@@ -102,7 +121,7 @@ export async function joinFamilyByCode(code: string) {
 }
 
 /**
- * Load family document by id.
+ * Load family document
  */
 export async function getFamily(fid: string) {
   const snap = await getDoc(doc(db, "families", fid));
@@ -112,7 +131,7 @@ export async function getFamily(fid: string) {
 }
 
 /**
- * Get current user's familyId from users/{uid}.
+ * Get current user's familyId
  */
 export async function getCurrentUserFamilyId() {
   const uid = auth.currentUser?.uid;
@@ -120,12 +139,11 @@ export async function getCurrentUserFamilyId() {
 
   const uSnap = await getDoc(doc(db, "users", uid));
   if (!uSnap.exists()) return null;
-  const data = uSnap.data() as any;
-  return (data.familyId as string | undefined) ?? null;
+  return (uSnap.data()?.familyId as string | undefined) ?? null;
 }
 
 /**
- * Subscribe to family document in real time.
+ * Subscribe to family doc
  */
 export function subscribeFamily(
   fid: string,
@@ -133,16 +151,13 @@ export function subscribeFamily(
 ) {
   const ref = doc(db, "families", fid);
   return onSnapshot(ref, (snap) => {
-    if (!snap.exists()) {
-      cb(null);
-      return;
-    }
+    if (!snap.exists()) return cb(null);
     cb({ id: fid, ...(snap.data() as any) } as Family);
   });
 }
 
 /**
- * Subscribe to family members list in real time.
+ * Subscribe to family members
  */
 export function subscribeMembers(
   fid: string,
@@ -158,19 +173,18 @@ export function subscribeMembers(
 }
 
 /**
- * Set / change family owner (client-side helper).
- * Сейчас опирается на Firestore rules, которые разрешают запись.
+ * Set family owner
  */
 export async function setFamilyOwner(fid: string, ownerUid: string) {
   await setDoc(
     doc(db, "families", fid),
-    { ownerUid: ownerUid },
+    { ownerUid },
     { merge: true }
   );
 }
 
 /**
- * Build universal deep link with invite code.
+ * Build invite link
  */
 export function makeInviteLink(inviteCode: string) {
   return Linking.createURL("/join", {
@@ -178,9 +192,6 @@ export function makeInviteLink(inviteCode: string) {
   });
 }
 
-/**
- * Share family invite link and code via native share sheet.
- */
 export async function shareInviteLink(inviteCode: string) {
   const url = makeInviteLink(inviteCode);
   await Share.share({
@@ -189,9 +200,8 @@ export async function shareInviteLink(inviteCode: string) {
   return url;
 }
 
-
 /**
- * Listener на список задач семьи
+ * Family tasks
  */
 export function listenFamilyTasks(
   fid: string,
@@ -237,4 +247,68 @@ export async function toggleFamilyTask(
     { status },
     { merge: true }
   );
+}
+
+/**
+ * Update family settings (FIRST VALID VERSION)
+ */
+export async function updateFamilySettings(
+  fid: string,
+  data: Partial<{
+    name: string;
+    location: FamilyLocation | null;
+    children: FamilyChildProfile[];
+    interests: string[];
+    findFriendsEnabled: boolean;
+  }>
+) {
+  await setDoc(
+    doc(db, "families", fid),
+    { ...data, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
+export type DiscoverableFamily = Family & {
+  distanceKm?: number;
+};
+
+/**
+ * Find friends around (FIRST VALID VERSION)
+ */
+export async function loadDiscoverableFamiliesAround(
+  centerLat: number,
+  centerLng: number,
+  radiusKm = 10,
+  currentFamilyId?: string | null
+): Promise<DiscoverableFamily[]> {
+  const qRef = query(
+    collection(db, "families"),
+    where("findFriendsEnabled", "==", true)
+  );
+
+  const snap = await getDocs(qRef);
+  const out: DiscoverableFamily[] = [];
+
+  snap.forEach((d) => {
+    const id = d.id;
+    if (currentFamilyId && id === currentFamilyId) return;
+
+    const v = d.data() as any;
+    const loc = v.location;
+
+    if (!loc?.lat || !loc?.lng) return;
+
+    const distKm = distanceM(centerLat, centerLng, loc.lat, loc.lng) / 1000;
+    if (distKm <= radiusKm) {
+      out.push({
+        id,
+        ...v,
+        distanceKm: distKm,
+      });
+    }
+  });
+
+  out.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+  return out;
 }

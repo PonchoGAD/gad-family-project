@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react";
+﻿// apps/mobile/src/screens/WalletScreen.tsx
+import { useEffect, useState } from "react";
 import { View, Text, Button, Alert } from "react-native";
 import { getOrCreateWallet } from "../lib/wallet";
 import { getGadBalance } from "../lib/gadToken";
@@ -9,43 +10,44 @@ import { getAge, getAgeTier } from "../lib/age";
 type Tier = "child" | "teen" | "adult";
 
 export default function WalletScreen({ navigation }: any) {
-  const [addr, setAddr] = useState<string>("");
-  const [bal, setBal] = useState<string>("");
+  const [addr, setAddr] = useState<string>("—");
+  const [bal, setBal] = useState<string>("—");
   const [tier, setTier] = useState<Tier>("teen");
   const [locked, setLocked] = useState<number>(0);
   const [fid, setFid] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<string>("free");
+  const [gasCredit, setGasCredit] = useState<number>(0);
 
   async function load() {
     try {
       const uid = auth.currentUser?.uid;
-      let currentTier: Tier = "teen";
+      if (!uid) return;
 
-      if (uid) {
-        const snap = await getDoc(doc(db, "users", uid));
-        const data = snap.data() || {};
+      const snap = await getDoc(doc(db, "users", uid));
+      const data = snap.data() || {};
 
-        const age = getAge(data.birthDate);
-        currentTier = getAgeTier(age);
-        setTier(currentTier);
+      // age tier
+      const age = getAge(data.birthDate);
+      const currentTier = getAgeTier(age);
+      setTier(currentTier);
 
-        const familyId = data.familyId ?? null;
-        setFid(familyId);
+      // subscription
+      setSubscription(data.subscription ?? "free");
 
-        if (familyId) {
-          const lsnap = await getDoc(
-            doc(db, "families", familyId, "vault", "locked", uid)
-          );
-          setLocked((lsnap.data()?.pointsLocked ?? 0) as number);
-        } else {
-          const lsnap = await getDoc(doc(db, "lockedBalances", uid));
-          setLocked((lsnap.data()?.pointsLocked ?? 0) as number);
-        }
+      // gas credit
+      setGasCredit(data.gasCreditWei ?? 0);
+
+      const familyId = data.familyId ?? null;
+      setFid(familyId);
+
+      if (familyId) {
+        const lsnap = await getDoc(doc(db, "families", familyId, "vault", "locked", uid));
+        setLocked(lsnap.data()?.pointsLocked ?? 0);
       }
 
-      // Wallet address and GAD balance (only for 14+)
       if (currentTier === "child") {
         setAddr("—");
-        setBal("");
+        setBal("—");
       } else {
         const w = await getOrCreateWallet();
         setAddr(w.address);
@@ -57,9 +59,8 @@ export default function WalletScreen({ navigation }: any) {
           setBal("—");
         }
       }
-    } catch (e: any) {
-      console.error("Wallet load error", e);
-      Alert.alert("Wallet", e?.message ?? "Failed to load wallet");
+    } catch (e) {
+      Alert.alert("Wallet", String(e));
     }
   }
 
@@ -68,57 +69,68 @@ export default function WalletScreen({ navigation }: any) {
   }, []);
 
   return (
-    <View style={{ padding: 24, gap: 12, flex: 1, backgroundColor: "#0b0c0f" }}>
+    <View style={{ padding: 24, gap: 14, flex: 1, backgroundColor: "#0b0c0f" }}>
+
       <Text style={{ fontWeight: "700", fontSize: 18, color: "#fff" }}>
         Wallet
       </Text>
-      <Text style={{ color: "#e5e7eb" }}>Age policy: {tier}</Text>
+
+      <Text style={{ color: "#9ca3af" }}>Subscription: {subscription.toUpperCase()}</Text>
+
+      <Text style={{ color: "#e5e7eb" }}>Age tier: {tier}</Text>
 
       {tier === "child" ? (
         <>
           <Text style={{ color: "#9ca3af", marginTop: 4 }}>
-            Children under 14 don’t create wallets. Personal earnings are
-            protected in the Family Vault.
+            Children under 14 don’t create wallets.
           </Text>
           <Text style={{ color: "#e5e7eb", marginTop: 4 }}>
             Locked balance: {locked.toLocaleString("en-US")} GAD Points
           </Text>
-          <View style={{ marginTop: 12, gap: 8 }}>
-            <Button
-              title="Open Family Treasury"
-              onPress={() => navigation.navigate("FamilyTreasury")}
-            />
-          </View>
         </>
       ) : (
         <>
-          <Text style={{ color: "#e5e7eb", marginTop: 4 }}>
-            My address: {addr || "—"}
+          <Text style={{ color: "#e5e7eb" }}>
+            Address: {addr}
           </Text>
-          <Text style={{ color: "#e5e7eb", marginTop: 4 }}>
-            GAD token balance: {bal || "—"}
+          <Text style={{ color: "#e5e7eb" }}>
+            GAD: {bal}
           </Text>
-
-          <View style={{ marginTop: 12, gap: 8 }}>
-            <Button title="Refresh" onPress={load} />
-            <Button
-              title="Set up / Backup wallet"
-              onPress={() => navigation.navigate("WalletOnboarding")}
-            />
-            <Button
-              title="My NFTs"
-              onPress={() => navigation.navigate("NFTs")}
-            />
-          </View>
-
-          {locked > 0 && !!fid && (
-            <Text style={{ color: "#6b7280", marginTop: 12 }}>
-              You also have {locked.toLocaleString("en-US")} locked points (from
-              child period) in the Family Vault.
-            </Text>
-          )}
         </>
       )}
+
+      {/* Gas stipend */}
+      <View style={{ marginTop: 16 }}>
+        <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+          Gas Stipend (BNB)
+        </Text>
+        <Text style={{ color: "#9ca3af", marginTop: 4 }}>
+          Available gas credit: {gasCredit} WEI
+        </Text>
+
+        <Button
+          title="View gas history"
+          onPress={() => navigation.navigate("GasHistory")}
+        />
+      </View>
+
+      {/* Actions */}
+      {tier !== "child" && (
+        <View style={{ marginTop: 14, gap: 8 }}>
+          <Button title="Refresh" onPress={load} />
+          <Button
+            title="Set up / Backup wallet"
+            onPress={() => navigation.navigate("WalletOnboarding")}
+          />
+          <Button title="My NFTs" onPress={() => navigation.navigate("NFTs")} />
+        </View>
+      )}
+
+      {/* Upgrade */}
+      <Button
+        title="Upgrade Subscription"
+        onPress={() => navigation.navigate("Subscription")}
+      />
     </View>
   );
 }

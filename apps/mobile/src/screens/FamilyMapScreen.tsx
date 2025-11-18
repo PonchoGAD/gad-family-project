@@ -2,8 +2,13 @@
 import React, { useEffect, useState } from "react";
 import MapView, { Marker } from "react-native-maps";
 import { View, Button } from "react-native";
-import { db } from "../firebase";
-import { collectionGroup, getDocs } from "firebase/firestore";
+import {
+  loadGeoPoints,
+  getFamilyId,
+  loadFamilyPlaces,
+  GeoPoint,
+  FamilyPlace,
+} from "../lib/geo";
 import {
   ensureLocationPermissions,
   startPinging,
@@ -14,37 +19,51 @@ type Point = { uid: string; lat: number; lng: number };
 
 export default function FamilyMapScreen() {
   const [points, setPoints] = useState<Point[]>([]);
+  const [places, setPlaces] = useState<FamilyPlace[]>([]);
+  const [fid, setFid] = useState<string | null>(null);
 
+  // старая логика load() + новая реализация через loadGeoPoints()
   async function load() {
     try {
-      // Читаем все geo/*/meta/last
-      const snap = await getDocs(collectionGroup(db, "meta"));
-      const items: Point[] = [];
-      snap.forEach((d) => {
-        if (d.id !== "last") return;
-        const v = d.data() as any;
-        if (typeof v.lat !== "number" || typeof v.lng !== "number") return;
-
-        // путь вида geo/{uid}/meta/last
-        const segments = d.ref.path.split("/");
-        const uid = segments[1] || d.id;
-
-        items.push({ uid, lat: v.lat, lng: v.lng });
-      });
+      const fp: GeoPoint[] = await loadGeoPoints();
+      const items: Point[] = fp.map((p) => ({
+        uid: p.uid,
+        lat: p.lat,
+        lng: p.lng,
+      }));
       setPoints(items);
     } catch (e) {
       console.log("load map points error", e);
     }
   }
 
+  async function loadAll() {
+    try {
+      const id = await getFamilyId();
+      setFid(id);
+
+      await load();
+
+      if (id) {
+        const p = await loadFamilyPlaces(id);
+        setPlaces(p);
+      } else {
+        setPlaces([]);
+      }
+    } catch (e) {
+      console.log("loadAll error", e);
+    }
+  }
+
   useEffect(() => {
-    load();
+    loadAll();
   }, []);
 
   async function goOnline() {
     try {
       await ensureLocationPermissions();
-      startPinging(120000); // каждые 2 минуты
+      // каждые 2 минуты
+      startPinging(120000);
     } catch (e) {
       console.log("goOnline error", e);
     }
@@ -55,7 +74,7 @@ export default function FamilyMapScreen() {
       <MapView
         style={{ flex: 1 }}
         initialRegion={{
-          latitude: 40.7128, // США по-умолчанию; потом подвинем по семье
+          latitude: 40.7128, // default US; позже можно центрировать по семье
           longitude: -74.006,
           latitudeDelta: 0.5,
           longitudeDelta: 0.5,
@@ -65,10 +84,21 @@ export default function FamilyMapScreen() {
           <Marker
             key={p.uid}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            title={p.uid}
+            title={p.uid.slice(0, 6)}
+            pinColor="dodgerblue"
+          />
+        ))}
+
+        {places.map((pl) => (
+          <Marker
+            key={pl.id}
+            coordinate={{ latitude: pl.lat, longitude: pl.lng }}
+            title={pl.name}
+            pinColor="gold"
           />
         ))}
       </MapView>
+
       <View
         style={{
           position: "absolute",
@@ -80,11 +110,11 @@ export default function FamilyMapScreen() {
           borderRadius: 12,
         }}
       >
-        <Button title="Обновить" onPress={load} />
+        <Button title="Refresh" onPress={loadAll} />
         <View style={{ height: 8 }} />
-        <Button title="Включить пинги" onPress={goOnline} />
+        <Button title="Enable GPS ping" onPress={goOnline} />
         <View style={{ height: 8 }} />
-        <Button title="Стоп" onPress={stopPinging} />
+        <Button title="Stop" onPress={stopPinging} />
       </View>
     </View>
   );

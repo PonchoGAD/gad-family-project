@@ -22,6 +22,11 @@ export type UserProfile = {
   uid: string;
   familyId?: string;
   subscription?: "free" | "plus" | "pro";
+
+  // Возраст / ограничения
+  birthDate?: string;        // "YYYY-MM-DD"
+  isAdult?: boolean;         // вычисляется на backend (>= 18)
+  noWallet?: boolean;        // true для детей < 14 (только кастодиальные операции)
 };
 
 // ---------- Family / Vault types ----------

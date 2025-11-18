@@ -1,3 +1,7 @@
+/**
+ * GAD Functions — FULL INDEX WITH AGE, REFERRALS, SUBSCRIPTIONS, EXCHANGE
+ */
+
 import { setGlobalOptions } from "firebase-functions/v2";
 import { familySetOwner, familyGetInfo } from "./family-vault.js";
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
@@ -5,8 +9,18 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { ethers } from "ethers";
+
+// ---------- Assistant ----------
 export { assistantChat } from "./assistant.js";
 
+// ---------- New feature modules (re-exports) ----------
+export { familySetBirthDate, familyApproveMemberAge } from "./family-age.js";
+export { applyReferralBonus, generateReferralCode } from "./referrals.js";
+export { applyGasStipend, setSubscriptionTier } from "./subscriptions.js";
+export { requestExchange, getExchangeLimits } from "./exchange-fund.js";
+export { createFund, depositToFund, withdrawFund } from "./funds.js";
+
+// Step engine
 import { runDailyDryRun } from "./step-engine.js";
 import { US_REGIONS, PUBLIC_TREASURY_CONFIG, TreasuryPublic } from "./config.js";
 
@@ -331,4 +345,5 @@ export const adminDoApprove = onCall(
   }
 );
 
+// ---------- Final exports ----------
 export { familySetOwner, familyGetInfo };
