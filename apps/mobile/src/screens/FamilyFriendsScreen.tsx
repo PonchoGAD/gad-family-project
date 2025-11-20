@@ -1,5 +1,5 @@
 // apps/mobile/src/screens/FamilyFriendsScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import {
@@ -14,24 +15,50 @@ import {
   getFamily,
   loadDiscoverableFamiliesAround,
 } from "../lib/families";
+import {
+  collection,
+  onSnapshot,
+  query,
+  DocumentData,
+} from "firebase/firestore";
+import { db } from "../firebase";
+
+type FriendRequest = {
+  id: string;
+  fromFamilyId?: string;
+  toFamilyId?: string;
+  status?: string; // "pending" | "accepted" | "rejected"
+};
+
+type Friend = {
+  id: string; // otherFamilyId
+  since?: any;
+  lastChatId?: string;
+};
+
+type NearbyFamily = any; // из loadDiscoverableFamiliesAround (id, name, location, city, kidsAges, interests и т.д.)
 
 export default function FamilyFriendsScreen({ navigation }: any) {
   const [fid, setFid] = useState<string | null>(null);
   const [myFamily, setMyFamily] = useState<any>(null);
-  const [families, setFamilies] = useState<any[]>([]);
+  const [families, setFamilies] = useState<NearbyFamily[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    try {
-      const f = await getCurrentUserFamilyId();
-      setFid(f);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
 
-      if (!f) {
+  async function loadNearby() {
+    try {
+      const currentFid = await getCurrentUserFamilyId();
+      setFid(currentFid);
+
+      if (!currentFid) {
         setLoading(false);
         return;
       }
 
-      const myFam = await getFamily(f);
+      const myFam = await getFamily(currentFid);
       setMyFamily(myFam);
 
       if (!myFam?.location) {
@@ -44,7 +71,7 @@ export default function FamilyFriendsScreen({ navigation }: any) {
         myFam.location.lat,
         myFam.location.lng,
         10,
-        f
+        currentFid
       );
 
       setFamilies(around);
@@ -54,9 +81,141 @@ export default function FamilyFriendsScreen({ navigation }: any) {
     setLoading(false);
   }
 
+  // Первичная загрузка семьей + ближайших
   useEffect(() => {
-    load();
+    loadNearby();
   }, []);
+
+  // Подписка на friendRequests и friends текущей семьи
+  useEffect(() => {
+    if (!fid) return;
+
+    // friendRequests
+    const reqRef = collection(db, "families", fid, "friendRequests");
+    const reqQ = query(reqRef);
+
+    const unsubReq = onSnapshot(
+      reqQ,
+      (snap) => {
+        const items: FriendRequest[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as DocumentData;
+          items.push({
+            id: docSnap.id,
+            fromFamilyId: data.fromFamilyId,
+            toFamilyId: data.toFamilyId,
+            status: data.status,
+          });
+        });
+        setFriendRequests(items);
+      },
+      (err) => {
+        console.error("friendRequests snapshot error", err);
+      }
+    );
+
+    // friends
+    const frRef = collection(db, "families", fid, "friends");
+    const frQ = query(frRef);
+
+    const unsubFriends = onSnapshot(
+      frQ,
+      (snap) => {
+        const items: Friend[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as DocumentData;
+          items.push({
+            id: docSnap.id,
+            since: data.since,
+            lastChatId: data.lastChatId,
+          });
+        });
+        setFriends(items);
+      },
+      (err) => {
+        console.error("friends snapshot error", err);
+      }
+    );
+
+    return () => {
+      unsubReq();
+      unsubFriends();
+    };
+  }, [fid]);
+
+  function getFriendStatus(otherFamilyId: string): "none" | "pending" | "accepted" | "incoming" {
+    if (!fid) return "none";
+
+    // Уже друзья
+    if (friends.some((f) => f.id === otherFamilyId)) {
+      return "accepted";
+    }
+
+    // Исходящая заявка в pending
+    const outgoing = friendRequests.find(
+      (r) =>
+        r.fromFamilyId === fid &&
+        r.toFamilyId === otherFamilyId &&
+        r.status === "pending"
+    );
+    if (outgoing) return "pending";
+
+    // Входящая заявка от этой семьи
+    const incoming = friendRequests.find(
+      (r) =>
+        r.toFamilyId === fid &&
+        r.fromFamilyId === otherFamilyId &&
+        r.status === "pending"
+    );
+    if (incoming) return "incoming";
+
+    return "none";
+  }
+
+  async function handleSendRequest(targetFamilyId: string) {
+    if (!fid) {
+      Alert.alert("Friends", "No family id");
+      return;
+    }
+
+    const status = getFriendStatus(targetFamilyId);
+    if (status === "accepted") {
+      Alert.alert("Friends", "You are already friends");
+      return;
+    }
+    if (status === "pending") {
+      Alert.alert("Friends", "Friend request is already pending");
+      return;
+    }
+
+    try {
+      setSendingTo(targetFamilyId);
+
+      const ref = collection(db, "families", fid, "friendRequests");
+      // Док ID пусть сгенерирует Firestore:
+      const { doc, setDoc, serverTimestamp } = await import(
+        "firebase/firestore"
+      );
+
+      const docRef = doc(ref);
+      await setDoc(docRef, {
+        fromFamilyId: fid,
+        toFamilyId: targetFamilyId,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+
+      Alert.alert("Friends", "Friend request sent");
+    } catch (e: any) {
+      console.error("send friend request error", e);
+      Alert.alert(
+        "Friends",
+        e?.message ?? "Failed to send friend request"
+      );
+    } finally {
+      setSendingTo(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -95,8 +254,8 @@ export default function FamilyFriendsScreen({ navigation }: any) {
           Families Nearby
         </Text>
         <Text style={{ color: "#9ca3af", marginBottom: 16 }}>
-          You don&apos;t have a family yet. Create or join a family to discover
-          nearby families.
+          You don&apos;t have a family yet. Create or join a family to
+          discover nearby families.
         </Text>
         <Button
           title="Open Families"
@@ -160,7 +319,7 @@ export default function FamilyFriendsScreen({ navigation }: any) {
           padding: 12,
           borderRadius: 12,
           margin: 12,
-          maxHeight: 220,
+          maxHeight: 260,
         }}
       >
         <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
@@ -169,55 +328,111 @@ export default function FamilyFriendsScreen({ navigation }: any) {
 
         {families.length === 0 ? (
           <Text style={{ color: "#6b7280", marginTop: 8 }}>
-            No families found in your area yet. Try enabling &quot;Find Friends&quot;
-            in family settings and make sure your location is set.
+            No families found in your area yet. Try enabling &quot;Find
+            Friends&quot; in family settings and make sure your location is
+            set.
           </Text>
         ) : (
           <FlatList
             data={families}
             keyExtractor={(i) => i.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  navigation.navigate("FamilyChatList", {
-                    startChatWithFamilyId: item.id,
-                  })
-                }
-                style={{
-                  paddingVertical: 8,
-                  borderBottomColor: "#333",
-                  borderBottomWidth: 1,
-                }}
-              >
-                <Text
+            renderItem={({ item }) => {
+              const status = getFriendStatus(item.id);
+              const isSending = sendingTo === item.id;
+
+              let statusLabel: string | null = null;
+              if (status === "accepted") statusLabel = "Friends";
+              else if (status === "pending") statusLabel = "Request pending";
+              else if (status === "incoming")
+                statusLabel = "Incoming request";
+
+              return (
+                <View
                   style={{
-                    color: "#E5E7EB",
-                    fontWeight: "600",
+                    paddingVertical: 8,
+                    borderBottomColor: "#333",
+                    borderBottomWidth: 1,
                   }}
                 >
-                  {item.name ?? "Family"}
-                </Text>
-                <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                  {item.city ?? "Unknown city"} • Kids ages:{" "}
-                  {item.kidsAges?.length
-                    ? item.kidsAges.join(", ")
-                    : "—"}
-                </Text>
-                {item.interests && Array.isArray(item.interests) && (
-                  <Text
-                    style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}
+                  <TouchableOpacity
+                    onPress={() =>
+                      navigation.navigate("FamilyChatList", {
+                        startChatWithFamilyId: item.id,
+                      })
+                    }
                   >
-                    Interests: {item.interests.join(", ")}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
+                    <Text
+                      style={{
+                        color: "#E5E7EB",
+                        fontWeight: "600",
+                      }}
+                    >
+                      {item.name ?? "Family"}
+                    </Text>
+                    <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                      {item.city ?? "Unknown city"} • Kids ages:{" "}
+                      {item.kidsAges?.length
+                        ? item.kidsAges.join(", ")
+                        : "—"}
+                    </Text>
+                    {item.interests && Array.isArray(item.interests) && (
+                      <Text
+                        style={{
+                          color: "#6B7280",
+                          fontSize: 12,
+                          marginTop: 2,
+                        }}
+                      >
+                        Interests: {item.interests.join(", ")}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginTop: 6,
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    {statusLabel ? (
+                      <Text
+                        style={{
+                          color:
+                            status === "accepted"
+                              ? "#22c55e"
+                              : status === "pending"
+                              ? "#fbbf24"
+                              : "#60a5fa",
+                          fontSize: 12,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {statusLabel}
+                      </Text>
+                    ) : (
+                      <View />
+                    )}
+
+                    {status === "none" && (
+                      <Button
+                        title={isSending ? "Sending..." : "Send friend request"}
+                        onPress={() => handleSendRequest(item.id)}
+                        disabled={isSending}
+                        color="#3b82f6"
+                      />
+                    )}
+                  </View>
+                </View>
+              );
+            }}
           />
         )}
       </View>
 
       <View style={{ paddingHorizontal: 12, paddingBottom: 16 }}>
-        <Button title="Refresh" onPress={load} />
+        <Button title="Refresh" onPress={loadNearby} />
       </View>
     </View>
   );

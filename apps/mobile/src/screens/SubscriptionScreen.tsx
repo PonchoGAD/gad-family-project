@@ -9,7 +9,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+} from "firebase/firestore";
 import { fn } from "../lib/functionsClient";
 
 type PlanId = "basic" | "family" | "pro";
@@ -27,12 +35,20 @@ type SubscriptionConfigResponse = {
   plans: Record<PlanId, PlanCfg>;
 };
 
+type GasHistoryItem = {
+  id: string;
+  amountWei: number;
+  tier?: string;
+  createdAt?: any;
+};
+
 export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Record<PlanId, PlanCfg> | null>(null);
   const [currentTier, setCurrentTier] = useState<PlanId | null>(null);
   const [gasCreditWei, setGasCreditWei] = useState<number>(0);
   const [familyId, setFamilyId] = useState<string | null>(null);
+  const [gasHistory, setGasHistory] = useState<GasHistoryItem[]>([]);
 
   async function load() {
     try {
@@ -53,7 +69,25 @@ export default function SubscriptionScreen() {
         typeof uData.gasCreditWei === "number" ? uData.gasCreditWei : 0;
       setGasCreditWei(gasCredit);
 
-      // 3) Plans from backend
+      // 3) Gas stipend history (gasStipend/{uid}/items, последние 10)
+      const histRef = collection(db, "gasStipend", uid, "items");
+      const qHist = query(histRef, orderBy("createdAt", "desc"), limit(10));
+      const histSnap = await getDocs(qHist);
+      const histItems: GasHistoryItem[] = histSnap.docs.map((d) => {
+        const v = d.data() as any;
+        return {
+          id: d.id,
+          amountWei:
+            typeof v.amountWei === "number"
+              ? v.amountWei
+              : Number(v.amountWei ?? 0),
+          tier: v.tier,
+          createdAt: v.createdAt,
+        };
+      });
+      setGasHistory(histItems);
+
+      // 4) Plans from backend
       const callCfg = fn<{}, SubscriptionConfigResponse>(
         "getSubscriptionConfig"
       );
@@ -83,6 +117,21 @@ export default function SubscriptionScreen() {
     if (!wei) return "0";
     const bnb = wei / 1e18;
     return bnb.toFixed(4);
+  }
+
+  function formatDate(value: any) {
+    if (!value) return "—";
+    try {
+      if (typeof value.toDate === "function") {
+        return value.toDate().toLocaleString();
+      }
+      if (typeof value.seconds === "number") {
+        return new Date(value.seconds * 1000).toLocaleString();
+      }
+    } catch {
+      // ignore
+    }
+    return "—";
   }
 
   async function handleChangeTier(planId: PlanId) {
@@ -168,6 +217,7 @@ export default function SubscriptionScreen() {
         steps, better multipliers and monthly gas support in BNB.
       </Text>
 
+      {/* Текущий план + Gas Balance */}
       <View
         style={{
           backgroundColor: "#111827",
@@ -181,10 +231,56 @@ export default function SubscriptionScreen() {
           {currentTier ? currentTier.toUpperCase() : "UNKNOWN"}
         </Text>
         <Text style={{ color: "#9ca3af", marginTop: 4 }}>
-          Gas stipend balance: {formatWeiToBNB(gasCreditWei)} BNB
+          Gas Balance (BNB for fees): {formatWeiToBNB(gasCreditWei)} BNB
         </Text>
       </View>
 
+      {/* История пополнений gasStipend */}
+      <View
+        style={{
+          backgroundColor: "#111827",
+          padding: 12,
+          borderRadius: 12,
+          marginBottom: 16,
+        }}
+      >
+        <Text
+          style={{
+            color: "#e5e7eb",
+            fontWeight: "600",
+            marginBottom: 6,
+          }}
+        >
+          Gas stipend history
+        </Text>
+
+        {gasHistory.length === 0 ? (
+          <Text style={{ color: "#6b7280", fontSize: 12 }}>
+            No gas top-ups yet.
+          </Text>
+        ) : (
+          gasHistory.map((item) => (
+            <View
+              key={item.id}
+              style={{
+                paddingVertical: 6,
+                borderBottomWidth: 1,
+                borderBottomColor: "rgba(31,41,55,0.7)",
+              }}
+            >
+              <Text style={{ color: "#e5e7eb", fontSize: 13 }}>
+                +{formatWeiToBNB(item.amountWei)} BNB{" "}
+                {item.tier ? `(${item.tier.toUpperCase()})` : ""}
+              </Text>
+              <Text style={{ color: "#6b7280", fontSize: 11 }}>
+                {formatDate(item.createdAt)}
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Планы подписок */}
       {ordered.map((plan) => {
         const isCurrent = plan.id === currentTier;
         return (

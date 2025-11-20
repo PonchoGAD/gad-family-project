@@ -312,3 +312,196 @@ export async function loadDiscoverableFamiliesAround(
   out.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
   return out;
 }
+
+/* ------------------------------------------------------------------ */
+/* Friendship model: friendRequests + friends                         */
+/* ------------------------------------------------------------------ */
+
+export type FriendRequestStatus = "pending" | "accepted" | "rejected";
+
+export type FriendRequest = {
+  id: string;
+  fromFamilyId: string;
+  toFamilyId: string;
+  status: FriendRequestStatus;
+  createdAt?: any;
+  // локальное поле, чтобы на экране понимать входящие/исходящие
+  direction?: "incoming" | "outgoing";
+};
+
+export type FamilyFriend = {
+  id: string; // other family id
+  since?: any;
+  lastChatId?: string | null;
+};
+
+/**
+ * Отправка заявки в друзья между семьями.
+ * Пишем 2 документа:
+ * - в fromFamily.friendRequests: direction = "outgoing"
+ * - в toFamily.friendRequests: direction = "incoming"
+ */
+export async function sendFriendRequest(
+  fromFamilyId: string,
+  toFamilyId: string
+) {
+  if (!fromFamilyId || !toFamilyId) {
+    throw new Error("Family ids required");
+  }
+  if (fromFamilyId === toFamilyId) {
+    throw new Error("Cannot befriend the same family");
+  }
+
+  const reqId = nanoid(12);
+  const base = {
+    id: reqId,
+    fromFamilyId,
+    toFamilyId,
+    status: "pending" as FriendRequestStatus,
+    createdAt: serverTimestamp(),
+  };
+
+  const fromRef = doc(db, "families", fromFamilyId, "friendRequests", reqId);
+  const toRef = doc(db, "families", toFamilyId, "friendRequests", reqId);
+
+  await Promise.all([
+    setDoc(
+      fromRef,
+      {
+        ...base,
+        direction: "outgoing",
+      },
+      { merge: true }
+    ),
+    setDoc(
+      toRef,
+      {
+        ...base,
+        direction: "incoming",
+      },
+      { merge: true }
+    ),
+  ]);
+
+  return reqId;
+}
+
+/**
+ * Подписка на заявки в друзья для семьи.
+ * Возвращает и входящие, и исходящие (через direction).
+ */
+export function subscribeFriendRequests(
+  fid: string,
+  cb: (items: FriendRequest[]) => void
+) {
+  const collRef = collection(db, "families", fid, "friendRequests");
+  return onSnapshot(collRef, (snap) => {
+    const arr: FriendRequest[] = snap.docs.map(
+      (d) => ({ id: d.id, ...(d.data() as any) } as FriendRequest)
+    );
+    cb(arr);
+  });
+}
+
+/**
+ * Подписка на друзей семьи.
+ */
+export function subscribeFriends(
+  fid: string,
+  cb: (items: FamilyFriend[]) => void
+) {
+  const collRef = collection(db, "families", fid, "friends");
+  return onSnapshot(collRef, (snap) => {
+    const arr: FamilyFriend[] = snap.docs.map(
+      (d) =>
+        ({
+          id: d.id,
+          ...(d.data() as any),
+        } as FamilyFriend)
+    );
+    cb(arr);
+  });
+}
+
+/**
+ * Принять заявку в друзья.
+ * Обновляем статус в обоих family.friendRequests
+ * + создаём записи в families/{fid}/friends.
+ */
+export async function acceptFriendRequest(
+  myFamilyId: string,
+  req: FriendRequest
+) {
+  const { fromFamilyId, toFamilyId, id } = req;
+  if (!id || !fromFamilyId || !toFamilyId) {
+    throw new Error("Invalid friend request");
+  }
+
+  const a = fromFamilyId;
+  const b = toFamilyId;
+
+  const refAReq = doc(db, "families", a, "friendRequests", id);
+  const refBReq = doc(db, "families", b, "friendRequests", id);
+
+  const refAFriend = doc(db, "families", a, "friends", b);
+  const refBFriend = doc(db, "families", b, "friends", a);
+
+  await Promise.all([
+    setDoc(
+      refAReq,
+      { status: "accepted" as FriendRequestStatus },
+      { merge: true }
+    ),
+    setDoc(
+      refBReq,
+      { status: "accepted" as FriendRequestStatus },
+      { merge: true }
+    ),
+    setDoc(
+      refAFriend,
+      {
+        since: serverTimestamp(),
+        lastChatId: null,
+      },
+      { merge: true }
+    ),
+    setDoc(
+      refBFriend,
+      {
+        since: serverTimestamp(),
+        lastChatId: null,
+      },
+      { merge: true }
+    ),
+  ]);
+}
+
+/**
+ * Отклонить заявку в друзья.
+ * Просто статус "rejected" в обоих family.friendRequests.
+ */
+export async function rejectFriendRequest(req: FriendRequest) {
+  const { fromFamilyId, toFamilyId, id } = req;
+  if (!id || !fromFamilyId || !toFamilyId) {
+    throw new Error("Invalid friend request");
+  }
+
+  const a = fromFamilyId;
+  const b = toFamilyId;
+
+  const refAReq = doc(db, "families", a, "friendRequests", id);
+  const refBReq = doc(db, "families", b, "friendRequests", id);
+
+  await Promise.all([
+    setDoc(
+      refAReq,
+      { status: "rejected" as FriendRequestStatus },
+      { merge: true }
+    ),
+    setDoc(
+      refBReq,
+      { status: "rejected" as FriendRequestStatus },
+      { merge: true }
+    ),
+  ]);
+}

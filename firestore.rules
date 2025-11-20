@@ -29,6 +29,7 @@ service cloud.firestore {
        USERS
     ====================== */
     match /users/{uid} {
+      // Базовое правило: владелец может читать/писать свой документ
       allow read, write: if request.auth != null && request.auth.uid == uid;
 
       match /assistant/{docId} {
@@ -58,6 +59,12 @@ service cloud.firestore {
         allow write: if false;
       }
       match /portfolioLedger/{id} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // Бейджи: видны только пользователю, но создаются/обновляются только через backend (Cloud Functions)
+      match /badges/{badgeId} {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow write: if false;
       }
@@ -166,6 +173,22 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow write: if false; // Only Cloud Functions if needed later
       }
+
+      /* ----- FRIEND REQUESTS ----- */
+      match /friendRequests/{reqId} {
+        // все авторизованные могут читать (для публичного слоя дружб)
+        allow read: if request.auth != null;
+        // писать может только семья, соответствующая fid
+        allow write: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+      }
+
+      /* ----- FRIENDS LIST ----- */
+      match /friends/{otherFamilyId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+      }
     }
 
     /* ======================
@@ -204,6 +227,18 @@ service cloud.firestore {
     match /funds/{fundId} {
       allow read: if request.auth != null;
       allow write: if false;
+    }
+
+    /* ----- REFERRALS (для ReferralScreen) ----- */
+    match /referrals/{uid}/items/{itemId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    /* ----- GAS STIPEND (для GasHistoryScreen и applyGasStipend) ----- */
+    match /gasStipend/{uid}/items/{itemId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false; // пополняем только через Cloud Functions
     }
   }
 }
