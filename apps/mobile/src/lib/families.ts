@@ -12,6 +12,9 @@ import {
   where,
   getDocs,
   onSnapshot,
+  orderBy,
+  addDoc,
+  updateDoc,
 } from "firebase/firestore";
 import * as Linking from "expo-linking";
 import { Share } from "react-native";
@@ -24,6 +27,7 @@ import { distanceM } from "./geo";
 export type FamilyMember = {
   id: string;
   joinedAt?: any;
+  isAdult?: boolean;
   lastLocation?: { lat: number; lng: number };
 };
 
@@ -74,7 +78,7 @@ export async function createFamily(name: string) {
 
   await setDoc(
     doc(db, "families", fid, "members", uid),
-    { joinedAt: serverTimestamp() },
+    { joinedAt: serverTimestamp(), isAdult: true },
     { merge: true }
   );
 
@@ -94,12 +98,12 @@ export async function joinFamilyByCode(code: string) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("No user");
 
-  const q = query(
+  const qRef = query(
     collection(db, "families"),
     where("inviteCode", "==", code.toUpperCase())
   );
 
-  const snaps = await getDocs(q);
+  const snaps = await getDocs(qRef);
   if (snaps.empty) throw new Error("Family not found");
 
   const ref = snaps.docs[0].ref;
@@ -107,7 +111,7 @@ export async function joinFamilyByCode(code: string) {
 
   await setDoc(
     doc(db, "families", fid, "members", uid),
-    { joinedAt: serverTimestamp() },
+    { joinedAt: serverTimestamp(), isAdult: true },
     { merge: true }
   );
 
@@ -133,7 +137,7 @@ export async function getFamily(fid: string) {
 /**
  * Get current user's familyId
  */
-export async function getCurrentUserFamilyId() {
+export async function getCurrentUserFamilyId(): Promise<string | null> {
   const uid = auth.currentUser?.uid;
   if (!uid) return null;
 
@@ -504,4 +508,196 @@ export async function rejectFriendRequest(req: FriendRequest) {
       { merge: true }
     ),
   ]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Multi-family chats                                                 */
+/* ------------------------------------------------------------------ */
+
+export type FamilyChat = {
+  id: string;
+  membersFamilies: string[];
+  lastMessageText?: string;
+  lastMessageAt?: any;
+  createdAt?: any;
+  updatedAt?: any;
+};
+
+export type FamilyChatMessage = {
+  id: string;
+  text: string;
+  senderUid: string;
+  senderFamilyId: string;
+  createdAt?: any;
+};
+
+/**
+ * Создать (или вернуть существующий) чат между двумя семьями.
+ * Фан-аут: чат-документ лежит под каждой семьёй в /families/{fid}/chats/{chatId}.
+ */
+export async function createMultiFamilyChat(
+  myFid: string,
+  otherFid: string
+): Promise<string> {
+  if (!myFid || !otherFid) {
+    throw new Error("Family ids required");
+  }
+  if (myFid === otherFid) {
+    throw new Error("Cannot create chat with the same family");
+  }
+
+  // 1) Проверяем, нет ли уже чата между этими семьями под myFid
+  const chatsColl = collection(db, "families", myFid, "chats");
+  const existingQ = query(
+    chatsColl,
+    where("membersFamilies", "array-contains", otherFid)
+  );
+  const existingSnap = await getDocs(existingQ);
+
+  if (!existingSnap.empty) {
+    // Берём первый найденный чат
+    return existingSnap.docs[0].id;
+  }
+
+  // 2) Создаём новый chatId
+  const chatId = nanoid(12);
+  const members = [myFid, otherFid];
+
+  const baseChat = {
+    membersFamilies: members,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    lastMessageText: "",
+    lastMessageAt: null,
+  };
+
+  // 3) Фан-аут чата под каждую семью
+  await Promise.all(
+    members.map((fid) =>
+      setDoc(
+        doc(db, "families", fid, "chats", chatId),
+        baseChat,
+        { merge: true }
+      )
+    )
+  );
+
+  // 4) Обновляем lastChatId в friends (если дружба уже есть)
+  const refAFriend = doc(db, "families", myFid, "friends", otherFid);
+  const refBFriend = doc(db, "families", otherFid, "friends", myFid);
+
+  await Promise.all([
+    setDoc(refAFriend, { lastChatId: chatId }, { merge: true }),
+    setDoc(refBFriend, { lastChatId: chatId }, { merge: true }),
+  ]);
+
+  return chatId;
+}
+
+/**
+ * Подписка на список чатов семьи, отсортированных по updatedAt desc.
+ */
+export function subscribeFamilyChats(
+  fid: string,
+  cb: (chats: FamilyChat[]) => void
+) {
+  const collRef = collection(db, "families", fid, "chats");
+  const qRef = query(collRef, orderBy("updatedAt", "desc"));
+
+  return onSnapshot(qRef, (snap) => {
+    const arr: FamilyChat[] = snap.docs.map(
+      (d) =>
+        ({
+          id: d.id,
+          ...(d.data() as any),
+        } as FamilyChat)
+    );
+    cb(arr);
+  });
+}
+
+/**
+ * Отправить сообщение в multi-family чат.
+ * Фан-аут сообщения и updatedAt/lastMessageText под все семьи-участники.
+ */
+export async function sendFamilyChatMessage(
+  fid: string,
+  chatId: string,
+  text: string
+) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("No user");
+
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  // 1) Читаем чат под своей семьёй, чтобы узнать всех участников
+  const chatRef = doc(db, "families", fid, "chats", chatId);
+  const chatSnap = await getDoc(chatRef);
+  if (!chatSnap.exists()) {
+    throw new Error("Chat not found");
+  }
+
+  const data = chatSnap.data() as any;
+  const membersFamilies: string[] = Array.isArray(data.membersFamilies)
+    ? data.membersFamilies
+    : [fid];
+
+  const messagePayload = {
+    text: trimmed,
+    senderUid: uid,
+    senderFamilyId: fid,
+    createdAt: serverTimestamp(),
+  };
+
+  const updatePayload = {
+    lastMessageText: trimmed,
+    lastMessageAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  // 2) Фан-аутим сообщение и обновление чата под каждую семью
+  await Promise.all(
+    membersFamilies.map(async (familyId) => {
+      const msgColl = collection(
+        db,
+        "families",
+        familyId,
+        "chats",
+        chatId,
+        "messages"
+      );
+      await addDoc(msgColl, messagePayload);
+
+      const famChatRef = doc(db, "families", familyId, "chats", chatId);
+      await setDoc(famChatRef, updatePayload, { merge: true });
+    })
+  );
+}
+
+/**
+ * Подписка на сообщения чата
+ */
+export function subscribeFamilyMessages(
+  fid: string,
+  chatId: string,
+  cb: (msgs: FamilyChatMessage[]) => void
+) {
+  const coll = collection(
+    db,
+    "families",
+    fid,
+    "chats",
+    chatId,
+    "messages"
+  );
+
+  const q = query(coll, orderBy("createdAt", "asc"));
+
+  return onSnapshot(q, (snap) => {
+    const arr = snap.docs.map(
+      (d) => ({ id: d.id, ...(d.data() as any) } as FamilyChatMessage)
+    );
+    cb(arr);
+  });
 }

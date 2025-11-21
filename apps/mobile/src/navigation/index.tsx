@@ -16,6 +16,9 @@ import FamilyGoalsScreen from "~/screens/FamilyGoalsScreen";
 import ExchangeHistoryScreen from "~/screens/ExchangeHistoryScreen";
 import FriendRequestsScreen from "~/screens/FriendRequestsScreen";
 import BadgesScreen from "~/screens/BadgesScreen";
+import GasHistoryScreen from "~/screens/GasHistoryScreen";
+import FamilySettingsScreen from "../screens/FamilySettingsScreen";
+
 
 // Route types
 export type RootStackParamList = {
@@ -32,6 +35,8 @@ export type RootStackParamList = {
   ExchangeHistory: undefined;
   FriendRequests: undefined;
   Badges: undefined;
+  Gashistory: undefined;
+  FamilySettings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -57,6 +62,8 @@ export function RootNavigator() {
         <Stack.Screen name="ExchangeHistory" component={ExchangeHistoryScreen} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
         <Stack.Screen name="Badges" component={BadgesScreen} />
+        <Stack.Screen name="Gashistory" component={GasHistoryScreen} />
+        <Stack.Screen name="FamilySettings" component={FamilySettingsScreen} />
         <Stack.Screen
           name="FamilyFriends"
           component={FamilyFriendsScreen}

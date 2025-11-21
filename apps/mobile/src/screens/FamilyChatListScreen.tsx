@@ -1,97 +1,304 @@
 // apps/mobile/src/screens/FamilyChatListScreen.tsx
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  Button,
-  TextInput,
+  ActivityIndicator,
   Alert,
 } from "react-native";
-import { auth, db } from "../firebase";
-import { getDoc, doc } from "firebase/firestore";
-import { listenFamilyChats, createFamilyChat } from "../lib/chat";
+import {
+  getCurrentUserFamilyId,
+  subscribeFamilyChats,
+  createMultiFamilyChat,
+  FamilyChat,
+} from "../lib/families";
 
-export default function FamilyChatListScreen({ navigation }: any) {
+type Props = {
+  navigation: any;
+  route: {
+    params?: {
+      startChatWithFamilyId?: string;
+    };
+  };
+};
+
+export default function FamilyChatListScreen({ navigation, route }: Props) {
   const [fid, setFid] = useState<string | null>(null);
-  const [chats, setChats] = useState<any[]>([]);
-  const [newTitle, setNewTitle] = useState("");
+  const [chats, setChats] = useState<FamilyChat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
+  const startChatWithFamilyId = route?.params?.startChatWithFamilyId;
+
+  // Подписка на чаты семьи
   useEffect(() => {
+    let unsub: (() => void) | undefined;
+
     (async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+      try {
+        const myFid = await getCurrentUserFamilyId();
+        if (!myFid) {
+          setLoading(false);
+          Alert.alert(
+            "Family Chats",
+            "You are not part of any family yet. Create or join a family first."
+          );
+          return;
+        }
 
-      const uSnap = await getDoc(doc(db, "users", uid));
-      const fid = (uSnap.data() as any)?.familyId ?? null;
-      setFid(fid);
+        setFid(myFid);
 
-      if (fid) {
-        return listenFamilyChats(fid, (arr) => setChats(arr));
+        unsub = subscribeFamilyChats(myFid, (items) => {
+          setChats(items);
+          setLoading(false);
+        });
+      } catch (e: any) {
+        console.error("FamilyChatListScreen load error", e);
+        setLoading(false);
+        Alert.alert(
+          "Family Chats",
+          e?.message ?? "Failed to load family chats"
+        );
       }
     })();
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
-  async function createChat() {
-    if (!fid) return;
-    if (!newTitle.trim()) return;
+  // Проверка/создание чата с конкретной семьёй (если пришёл startChatWithFamilyId)
+  const ensureChatWithFamily = useCallback(
+    async (otherFamilyId: string) => {
+      if (!fid) return;
+      if (!otherFamilyId) return;
 
-    await createFamilyChat(fid, newTitle.trim(), ["all"]);
-    setNewTitle("");
-    Alert.alert("Chat created");
+      // Есть ли уже чат, где участвуют обе семьи?
+      const existing = chats.find(
+        (c) =>
+          Array.isArray(c.membersFamilies) &&
+          c.membersFamilies.includes(fid) &&
+          c.membersFamilies.includes(otherFamilyId)
+      );
+
+      if (existing) {
+        navigation.navigate("FamilyChat", {
+          chatId: existing.id,
+          title: "Family chat",
+          membersFamilies: existing.membersFamilies,
+        });
+        return;
+      }
+
+      try {
+        setCreating(true);
+        const chatId = await createMultiFamilyChat(fid, otherFamilyId);
+
+        navigation.navigate("FamilyChat", {
+          chatId,
+          title: "Family chat",
+          membersFamilies: [fid, otherFamilyId],
+        });
+      } catch (e: any) {
+        console.error("createMultiFamilyChat error", e);
+        Alert.alert(
+          "Family Chats",
+          e?.message ?? "Failed to start chat with this family"
+        );
+      } finally {
+        setCreating(false);
+      }
+    },
+    [fid, chats, navigation]
+  );
+
+  // Если экран открыт с параметром startChatWithFamilyId — запускаем ensureChatWithFamily,
+  // когда уже загрузились fid и список чатов.
+  useEffect(() => {
+    if (!startChatWithFamilyId) return;
+    if (!fid) return;
+    if (loading) return;
+
+    ensureChatWithFamily(startChatWithFamilyId);
+  }, [startChatWithFamilyId, fid, loading, ensureChatWithFamily]);
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#020617",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator />
+        <Text style={{ color: "#9ca3af", marginTop: 8 }}>
+          Loading family chats…
+        </Text>
+      </View>
+    );
+  }
+
+  if (!fid) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#020617",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 24,
+        }}
+      >
+        <Text
+          style={{
+            color: "#e5e7eb",
+            fontSize: 16,
+            textAlign: "center",
+            marginBottom: 8,
+          }}
+        >
+          You are not part of any family yet.
+        </Text>
+        <Text
+          style={{
+            color: "#9ca3af",
+            fontSize: 13,
+            textAlign: "center",
+          }}
+        >
+          Create or join a family to start chatting with other families.
+        </Text>
+      </View>
+    );
+  }
+
+  function renderChat(item: FamilyChat) {
+    const members = item.membersFamilies || [];
+    const otherFamilies = members.filter((m) => m !== fid);
+    const subtitle =
+      otherFamilies.length > 0
+        ? `Chat with: ${otherFamilies.join(", ")}`
+        : "Family chat";
+
+    const lastText = item.lastMessageText || "No messages yet";
+
+    return (
+      <TouchableOpacity
+        onPress={() =>
+          navigation.navigate("FamilyChat", {
+            chatId: item.id,
+            title: "Family chat",
+            membersFamilies: item.membersFamilies,
+          })
+        }
+        style={{
+          backgroundColor: "#0f172a",
+          padding: 14,
+          borderRadius: 16,
+          marginBottom: 10,
+          borderWidth: 1,
+          borderColor: "rgba(31,41,55,0.9)",
+        }}
+      >
+        <Text
+          style={{
+            color: "#f9fafb",
+            fontSize: 16,
+            fontWeight: "700",
+          }}
+        >
+          {subtitle}
+        </Text>
+        <Text
+          style={{
+            color: "#9ca3af",
+            fontSize: 13,
+            marginTop: 4,
+          }}
+          numberOfLines={1}
+        >
+          {lastText}
+        </Text>
+      </TouchableOpacity>
+    );
   }
 
   return (
-    <View style={{ flex: 1, padding: 16, backgroundColor: "#0b0f17" }}>
-      <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>
-        Family Chats
-      </Text>
-
-      {/* Create chat */}
-      <View style={{ marginTop: 12 }}>
-        <TextInput
-          placeholder="New chat name"
-          placeholderTextColor="#6B7280"
-          value={newTitle}
-          onChangeText={setNewTitle}
+    <View style={{ flex: 1, backgroundColor: "#020617" }}>
+      {/* Header */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: 16,
+          paddingBottom: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: "rgba(148,163,184,0.3)",
+        }}
+      >
+        <Text
           style={{
-            borderWidth: 1,
-            borderColor: "#374151",
-            borderRadius: 8,
-            padding: 8,
-            color: "#fff",
+            color: "#f9fafb",
+            fontSize: 22,
+            fontWeight: "700",
+            marginBottom: 4,
           }}
-        />
-        <Button title="Create chat" onPress={createChat} />
+        >
+          Family Chats
+        </Text>
+        <Text style={{ color: "#9ca3af", fontSize: 13 }}>
+          Conversations between your family and other families.
+        </Text>
+        {creating && (
+          <Text
+            style={{
+              color: "#fbbf24",
+              fontSize: 12,
+              marginTop: 4,
+            }}
+          >
+            Creating chat…
+          </Text>
+        )}
       </View>
 
+      {/* List of chats */}
       <FlatList
-        style={{ marginTop: 20 }}
         data={chats}
-        keyExtractor={(i) => i.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 24,
+        }}
+        renderItem={({ item }) => renderChat(item)}
+        ListEmptyComponent={
+          <View
             style={{
-              padding: 12,
-              backgroundColor: "#111827",
-              borderRadius: 10,
-              marginBottom: 10,
+              backgroundColor: "#0f172a",
+              padding: 16,
+              borderRadius: 16,
+              marginTop: 16,
             }}
-            onPress={() =>
-              navigation.navigate("FamilyChat", {
-                chatId: item.id,
-                title: item.title,
-              })
-            }
           >
-            <Text style={{ color: "#fff", fontSize: 16 }}>{item.title}</Text>
-            <Text style={{ color: "#888", marginTop: 4 }}>
-              Members: {item.members?.join(", ") ?? "unknown"}
+            <Text
+              style={{
+                color: "#e5e7eb",
+                fontWeight: "500",
+                marginBottom: 4,
+              }}
+            >
+              No chats yet
             </Text>
-          </TouchableOpacity>
-        )}
+            <Text style={{ color: "#9ca3af", fontSize: 13 }}>
+              Find nearby families on the map and send them a friend request to
+              start chatting.
+            </Text>
+          </View>
+        }
       />
     </View>
   );

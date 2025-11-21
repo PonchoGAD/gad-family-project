@@ -40,6 +40,7 @@ export default function FamilyGoalsScreen() {
       }
 
       setFid(id);
+
       const coll = collection(db, "families", id, "goals");
       const q = query(coll, orderBy("createdAt", "desc"));
 
@@ -60,17 +61,19 @@ export default function FamilyGoalsScreen() {
 
   async function handleCreateGoal() {
     if (!fid) return;
-    const t = newTitle.trim();
-    const target = Number(newTarget || "0");
-    if (!t || target <= 0) {
-      Alert.alert("Goals", "Enter title + target");
+
+    const title = newTitle.trim();
+    const target = Number(newTarget);
+
+    if (!title || target <= 0) {
+      Alert.alert("Goals", "Enter title and target points");
       return;
     }
 
     try {
       const ref = doc(collection(db, "families", fid, "goals"));
       await setDoc(ref, {
-        title: t,
+        title,
         targetPoints: target,
         currentPoints: 0,
         status: "active",
@@ -117,10 +120,14 @@ export default function FamilyGoalsScreen() {
         Family Goals
       </Text>
 
+      {/* Goals list */}
       {goals.map((g) => {
         const percent =
           g.targetPoints > 0
-            ? Math.min(100, Math.round((g.currentPoints / g.targetPoints) * 100))
+            ? Math.min(
+                100,
+                Math.round((g.currentPoints / g.targetPoints) * 100)
+              )
             : 0;
 
         return (
@@ -131,6 +138,8 @@ export default function FamilyGoalsScreen() {
               padding: 14,
               borderRadius: 16,
               marginBottom: 12,
+              borderWidth: 1,
+              borderColor: "rgba(148,163,184,0.4)",
             }}
           >
             <Text
@@ -138,11 +147,10 @@ export default function FamilyGoalsScreen() {
             >
               {g.title}
             </Text>
-            <Text
-              style={{ color: "#9ca3af", marginTop: 4, fontSize: 13 }}
-            >
+            <Text style={{ color: "#9ca3af", marginTop: 4, fontSize: 13 }}>
               {g.currentPoints?.toLocaleString("en-US")} /{" "}
-              {g.targetPoints?.toLocaleString("en-US")} points ({percent}%)
+              {g.targetPoints?.toLocaleString("en-US")} points ({percent}
+              %)
             </Text>
 
             <View
@@ -166,16 +174,20 @@ export default function FamilyGoalsScreen() {
         );
       })}
 
-      {/* CREATE */}
+      {/* Create Goal */}
       <View
         style={{
           backgroundColor: "#0f172a",
           padding: 14,
           borderRadius: 16,
+          borderWidth: 1,
+          borderColor: "rgba(148,163,184,0.4)",
           marginTop: 16,
         }}
       >
-        <Text style={{ color: "#9ca3af", marginBottom: 6 }}>Create goal</Text>
+        <Text style={{ color: "#9ca3af", marginBottom: 6 }}>
+          Create new goal
+        </Text>
 
         <TextInput
           placeholder="Goal title"
@@ -189,6 +201,8 @@ export default function FamilyGoalsScreen() {
             paddingVertical: 8,
             color: "#f9fafb",
             marginBottom: 8,
+            borderWidth: 1,
+            borderColor: "#1f2937",
           }}
         />
 
@@ -205,6 +219,8 @@ export default function FamilyGoalsScreen() {
             paddingVertical: 8,
             color: "#f9fafb",
             marginBottom: 12,
+            borderWidth: 1,
+            borderColor: "#1f2937",
           }}
         />
 
@@ -212,8 +228,8 @@ export default function FamilyGoalsScreen() {
           onPress={handleCreateGoal}
           style={{
             paddingVertical: 10,
-            backgroundColor: "#3b82f6",
             borderRadius: 999,
+            backgroundColor: "#3b82f6",
             alignItems: "center",
           }}
         >

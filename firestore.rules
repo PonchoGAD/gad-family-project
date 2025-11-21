@@ -81,6 +81,7 @@ service cloud.firestore {
        FAMILIES ROOT
     ====================== */
     match /families/{fid} {
+      // Семейный документ может читать любой авторизованный (для FindFriends и т.д.)
       allow read: if request.auth != null;
       allow write: if false;
 
@@ -157,26 +158,43 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      /* ----- FAMILY CHATS ----- */
+      /* ----- FAMILY CHATS (multi-family) ----- */
       match /chats/{chatId} {
-        allow read: if request.auth != null;
-        allow write: if false;
+        // читать / писать чат может только пользователь, у которого familyId == fid
+        allow read: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+        allow write: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
 
         match /messages/{mid} {
-          allow read: if request.auth != null;
-          allow write: if false;
+          allow read: if request.auth != null &&
+            userFamilyId(request.auth.uid) == fid;
+          allow write: if request.auth != null &&
+            userFamilyId(request.auth.uid) == fid;
         }
       }
 
-      /* ----- FAMILY TODO LIST ----- */
+      /* ----- FAMILY TODO LIST (tasks) ----- */
       match /tasks/{tid} {
-        allow read: if request.auth != null;
-        allow write: if false; // Only Cloud Functions if needed later
+        // задачи семьи доступны всем членам семьи
+        allow read: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+        allow write: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+      }
+
+      /* ----- FAMILY GOALS ----- */
+      match /goals/{goalId} {
+        // цели семьи доступны всем членам семьи
+        allow read: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
+        allow write: if request.auth != null &&
+          userFamilyId(request.auth.uid) == fid;
       }
 
       /* ----- FRIEND REQUESTS ----- */
       match /friendRequests/{reqId} {
-        // все авторизованные могут читать (для публичного слоя дружб)
+        // читать могут все авторизованные (для публичного слоя дружб / отладки)
         allow read: if request.auth != null;
         // писать может только семья, соответствующая fid
         allow write: if request.auth != null &&

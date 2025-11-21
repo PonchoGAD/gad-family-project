@@ -89,6 +89,8 @@ export default function ExchangeHistoryScreen() {
             backgroundColor: "#0f172a",
             padding: 16,
             borderRadius: 16,
+            borderWidth: 1,
+            borderColor: "rgba(148,163,184,0.4)",
           }}
         >
           <Text style={{ color: "#e5e7eb" }}>No exchange history yet.</Text>
@@ -103,14 +105,18 @@ export default function ExchangeHistoryScreen() {
             padding: 16,
             borderRadius: 16,
             marginBottom: 10,
+            borderWidth: 1,
+            borderColor: "rgba(148,163,184,0.4)",
           }}
         >
           <Text style={{ color: "#f9fafb", fontWeight: "700" }}>
             {it.points} points → {it.usdt} USDT
           </Text>
+
           <Text style={{ color: "#9ca3af", marginTop: 4, fontSize: 12 }}>
             Status: {it.status}
           </Text>
+
           <Text style={{ color: "#6b7280", marginTop: 4, fontSize: 12 }}>
             {it.ts ? new Date(it.ts.seconds * 1000).toLocaleString() : "—"}
           </Text>

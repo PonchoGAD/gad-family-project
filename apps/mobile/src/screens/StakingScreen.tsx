@@ -121,12 +121,15 @@ export default function StakingScreen() {
         Staking
       </Text>
 
+      {/* APR */}
       <View
         style={{
           backgroundColor: "#0f172a",
           borderRadius: 16,
           padding: 16,
           marginBottom: 16,
+          borderWidth: 1,
+          borderColor: "rgba(148,163,184,0.4)",
         }}
       >
         <Text style={{ color: "#9ca3af" }}>APR</Text>
@@ -137,12 +140,15 @@ export default function StakingScreen() {
         </Text>
       </View>
 
+      {/* BALANCES */}
       <View
         style={{
           backgroundColor: "#0f172a",
           borderRadius: 16,
           padding: 16,
           marginBottom: 16,
+          borderWidth: 1,
+          borderColor: "rgba(148,163,184,0.4)",
         }}
       >
         <Text style={{ color: "#9ca3af" }}>Staked</Text>
@@ -157,6 +163,7 @@ export default function StakingScreen() {
 
         <Pressable
           onPress={handleClaim}
+          disabled={processing}
           style={{
             marginTop: 12,
             paddingVertical: 10,
@@ -165,7 +172,6 @@ export default function StakingScreen() {
             alignItems: "center",
             opacity: processing ? 0.4 : 1,
           }}
-          disabled={processing}
         >
           <Text
             style={{
@@ -185,6 +191,8 @@ export default function StakingScreen() {
           backgroundColor: "#0f172a",
           borderRadius: 16,
           padding: 16,
+          borderWidth: 1,
+          borderColor: "rgba(148,163,184,0.4)",
         }}
       >
         <TextInput
@@ -200,11 +208,14 @@ export default function StakingScreen() {
             paddingVertical: 8,
             color: "#f9fafb",
             marginBottom: 12,
+            borderWidth: 1,
+            borderColor: "#1f2937",
           }}
         />
 
         <Pressable
           onPress={handleStake}
+          disabled={processing}
           style={{
             paddingVertical: 10,
             borderRadius: 999,
@@ -213,20 +224,13 @@ export default function StakingScreen() {
             marginBottom: 10,
             opacity: processing ? 0.4 : 1,
           }}
-          disabled={processing}
         >
-          <Text
-            style={{
-              color: "#fff",
-              fontWeight: "700",
-            }}
-          >
-            Stake
-          </Text>
+          <Text style={{ color: "#fff", fontWeight: "700" }}>Stake</Text>
         </Pressable>
 
         <Pressable
           onPress={handleUnstake}
+          disabled={processing}
           style={{
             paddingVertical: 10,
             borderRadius: 999,
@@ -235,14 +239,8 @@ export default function StakingScreen() {
             alignItems: "center",
             opacity: processing ? 0.4 : 1,
           }}
-          disabled={processing}
         >
-          <Text
-            style={{
-              color: "#f97316",
-              fontWeight: "700",
-            }}
-          >
+          <Text style={{ color: "#f97316", fontWeight: "700" }}>
             Unstake
           </Text>
         </Pressable>
