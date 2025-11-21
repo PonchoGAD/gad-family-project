@@ -41,7 +41,9 @@ export default function WalletScreen({ navigation }: any) {
       setFid(familyId);
 
       if (familyId) {
-        const lsnap = await getDoc(doc(db, "families", familyId, "vault", "locked", uid));
+        const lsnap = await getDoc(
+          doc(db, "families", familyId, "vault", "locked", uid)
+        );
         setLocked(lsnap.data()?.pointsLocked ?? 0);
       }
 
@@ -69,13 +71,21 @@ export default function WalletScreen({ navigation }: any) {
   }, []);
 
   return (
-    <View style={{ padding: 24, gap: 14, flex: 1, backgroundColor: "#0b0c0f" }}>
-
+    <View
+      style={{
+        padding: 24,
+        gap: 14,
+        flex: 1,
+        backgroundColor: "#0b0c0f",
+      }}
+    >
       <Text style={{ fontWeight: "700", fontSize: 18, color: "#fff" }}>
         Wallet
       </Text>
 
-      <Text style={{ color: "#9ca3af" }}>Subscription: {subscription.toUpperCase()}</Text>
+      <Text style={{ color: "#9ca3af" }}>
+        Subscription: {subscription.toUpperCase()}
+      </Text>
 
       <Text style={{ color: "#e5e7eb" }}>Age tier: {tier}</Text>
 
@@ -90,18 +100,16 @@ export default function WalletScreen({ navigation }: any) {
         </>
       ) : (
         <>
-          <Text style={{ color: "#e5e7eb" }}>
-            Address: {addr}
-          </Text>
-          <Text style={{ color: "#e5e7eb" }}>
-            GAD: {bal}
-          </Text>
+          <Text style={{ color: "#e5e7eb" }}>Address: {addr}</Text>
+          <Text style={{ color: "#e5e7eb" }}>GAD: {bal}</Text>
         </>
       )}
 
       {/* Gas stipend */}
       <View style={{ marginTop: 16 }}>
-        <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+        <Text
+          style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}
+        >
           Gas Stipend (BNB)
         </Text>
         <Text style={{ color: "#9ca3af", marginTop: 4 }}>
@@ -122,7 +130,16 @@ export default function WalletScreen({ navigation }: any) {
             title="Set up / Backup wallet"
             onPress={() => navigation.navigate("WalletOnboarding")}
           />
-          <Button title="My NFTs" onPress={() => navigation.navigate("NFTs")} />
+
+          {/* Новые действия кошелька — история и NFT */}
+          <Button
+            title="History"
+            onPress={() => navigation.navigate("WalletActivity")}
+          />
+          <Button
+            title="My NFTs"
+            onPress={() => navigation.navigate("NFTGallery")}
+          />
         </View>
       )}
 

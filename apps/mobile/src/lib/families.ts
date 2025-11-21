@@ -513,6 +513,26 @@ export async function rejectFriendRequest(req: FriendRequest) {
 /* ------------------------------------------------------------------ */
 /* Multi-family chats                                                 */
 /* ------------------------------------------------------------------ */
+// ВНИЗ ФАЙЛА, перед export type FamilyChat / после joinFamilyByCode и getCurrentUserFamilyId
+
+/**
+ * Ensure that current user has a family.
+ * If familyId already exists → return it.
+ * If not → create a new family where user is owner.
+ */
+export async function ensureCurrentUserFamily(): Promise<{
+  fid: string;
+  created: boolean;
+}> {
+  const existing = await getCurrentUserFamilyId();
+  if (existing) {
+    return { fid: existing, created: false };
+  }
+
+  // Создаём дефолтную семью
+  const res = await createFamily("My GAD Family");
+  return { fid: res.fid, created: true };
+}
 
 export type FamilyChat = {
   id: string;

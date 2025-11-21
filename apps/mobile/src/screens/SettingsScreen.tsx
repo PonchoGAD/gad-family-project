@@ -14,6 +14,7 @@ import {
   updateFamilySettings,
   getFamily,
   getCurrentUserFamilyId,
+  ensureCurrentUserFamily,
 } from "../lib/families";
 import { getReferralLink, shareReferralLink } from "../lib/user";
 
@@ -82,21 +83,24 @@ export default function SettingsScreen({ navigation }: Props) {
           } catch (e) {}
         }
 
-        // Load family
-        const myFid = await getCurrentUserFamilyId();
-        setFid(myFid);
+// Load / ensure family
+const { fid: myFid, created } = await ensureCurrentUserFamily();
+setFid(myFid);
 
-        if (myFid) {
-          const fam = await getFamily(myFid);
+if (created) {
+  console.log("[Settings] Created default family for user:", myFid);
+}
 
-          setIsOwner(fam?.ownerUid === uid);
-          setFindFriendsEnabled(fam?.findFriendsEnabled ?? false);
-        }
+if (myFid) {
+  const fam = await getFamily(myFid);
+
+  setIsOwner(fam?.ownerUid === uid);
+  setFindFriendsEnabled(fam?.findFriendsEnabled ?? false);
+}
 
         // Referral link — FIXED
         const link = await getReferralLink();
         setRefLink(link.url);
-
       } catch (e) {
         console.log("settings load error", e);
       } finally {
@@ -190,7 +194,10 @@ export default function SettingsScreen({ navigation }: Props) {
             }}
           >
             <Text style={{ color: "#e5e7eb" }}>Enable GPS ping</Text>
-            <Switch value={trackingEnabled} onValueChange={handleToggleTracking} />
+            <Switch
+              value={trackingEnabled}
+              onValueChange={handleToggleTracking}
+            />
           </View>
         )}
       </View>
@@ -256,6 +263,28 @@ export default function SettingsScreen({ navigation }: Props) {
           title="Open AI Assistant"
           onPress={() => navigation.navigate("Assistant")}
         />
+      </View>
+
+      {/* WALLET & NFT SECTION */}
+      <View style={{ marginTop: 24 }}>
+        <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
+          Wallet
+        </Text>
+
+        <Text style={{ color: "#9ca3af", marginTop: 4 }}>
+          View your on-chain activity and NFT collection.
+        </Text>
+
+        <View style={{ marginTop: 8, gap: 8 }}>
+          <Button
+            title="View Activity"
+            onPress={() => navigation.navigate("WalletActivity")}
+          />
+          <Button
+            title="My NFTs"
+            onPress={() => navigation.navigate("NFTGallery")}
+          />
+        </View>
       </View>
     </View>
   );

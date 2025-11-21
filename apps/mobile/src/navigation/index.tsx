@@ -1,3 +1,4 @@
+// apps/mobile/src/navigation/index.tsx
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -18,9 +19,10 @@ import FriendRequestsScreen from "~/screens/FriendRequestsScreen";
 import BadgesScreen from "~/screens/BadgesScreen";
 import GasHistoryScreen from "~/screens/GasHistoryScreen";
 import FamilySettingsScreen from "../screens/FamilySettingsScreen";
+import WalletActivityScreen from "../screens/WalletActivityScreen";
+import NFTGalleryScreen from "../screens/NFTGalleryScreen";
+import NFTDetailScreen from "../screens/NFTDetailScreen";
 
-
-// Route types
 export type RootStackParamList = {
   Families: undefined;
   Settings: undefined;
@@ -35,8 +37,11 @@ export type RootStackParamList = {
   ExchangeHistory: undefined;
   FriendRequests: undefined;
   Badges: undefined;
-  Gashistory: undefined;
+  GasHistory: undefined;
   FamilySettings: undefined;
+  WalletActivity: undefined;
+  NFTGallery: undefined;
+  NFTDetail: { item: any };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -56,18 +61,34 @@ export function RootNavigator() {
         <Stack.Screen name="Wallet" component={WalletScreen} />
         <Stack.Screen name="FamilyMap" component={FamilyMapScreen} />
         <Stack.Screen name="Assistant" component={AssistantScreen} />
+
         <Stack.Screen name="Referral" component={ReferralScreen} />
         <Stack.Screen name="Staking" component={StakingScreen} />
         <Stack.Screen name="FamilyGoals" component={FamilyGoalsScreen} />
         <Stack.Screen name="ExchangeHistory" component={ExchangeHistoryScreen} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
         <Stack.Screen name="Badges" component={BadgesScreen} />
-        <Stack.Screen name="Gashistory" component={GasHistoryScreen} />
+        <Stack.Screen name="GasHistory" component={GasHistoryScreen} />
+
         <Stack.Screen name="FamilySettings" component={FamilySettingsScreen} />
+
         <Stack.Screen
-          name="FamilyFriends"
-          component={FamilyFriendsScreen}
+          name="WalletActivity"
+          component={WalletActivityScreen}
+          options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="NFTGallery"
+          component={NFTGalleryScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="NFTDetail"
+          component={NFTDetailScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen name="FamilyFriends" component={FamilyFriendsScreen} />
         <Stack.Screen name="MyFunds" component={MyFundsScreen} />
       </Stack.Navigator>
     </NavigationContainer>

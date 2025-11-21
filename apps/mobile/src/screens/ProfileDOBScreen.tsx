@@ -3,24 +3,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, Alert } from "react-native";
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-
-function calculateAge(dob: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
-  if (!m) return null;
-  const year = Number(m[1]);
-  const month = Number(m[2]) - 1; // JS months 0-11
-  const day = Number(m[3]);
-  const birth = new Date(year, month, day);
-  if (Number.isNaN(birth.getTime())) return null;
-
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const mDiff = today.getMonth() - birth.getMonth();
-  if (mDiff < 0 || (mDiff === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
-  return age;
-}
+import { getAge } from "../lib/age";
 
 export default function ProfileDOBScreen() {
   const [dob, setDob] = useState("2010-05-12");
@@ -48,7 +31,10 @@ export default function ProfileDOBScreen() {
       return;
     }
 
-    const age = calculateAge(dob.trim());
+    const trimmed = dob.trim();
+
+    // Используем общую логику возраста из lib/age
+    const age = getAge(trimmed);
     if (age === null || age < 0 || age > 120) {
       Alert.alert(
         "Invalid date",
@@ -64,7 +50,7 @@ export default function ProfileDOBScreen() {
       await setDoc(
         doc(db, "users", uid),
         {
-          birthDate: dob.trim(),
+          birthDate: trimmed,
           age,
           isAdult,
           dobUpdatedAt: Date.now(),
