@@ -10,6 +10,7 @@ import {
   FlatList,
   TouchableOpacity,
   Share,
+  ScrollView,
 } from "react-native";
 import { auth, db } from "../firebase";
 import {
@@ -304,255 +305,268 @@ export default function FamiliesScreen({ navigation }: any) {
   // RENDER
   // -----------------------------------------------------
   return (
-    <View style={{ flex: 1, padding: 16, backgroundColor: "#0b0f17" }}>
-      <Text
-        style={{
-          fontWeight: "700",
-          fontSize: 20,
-          color: "#ffffff",
-          marginBottom: 12,
+    <View style={{ flex: 1, backgroundColor: "#020617" }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 32,
         }}
+        showsVerticalScrollIndicator={false}
       >
-        Families
-      </Text>
-
-      {/* ===================== MAIN FAMILY CARD ===================== */}
-      <View
-        style={{
-          borderRadius: 12,
-          padding: 12,
-          backgroundColor: "#111827",
-          marginBottom: 12,
-        }}
-      >
-        <Text style={{ color: "#9CA3AF", marginBottom: 4 }}>My family</Text>
-        <Text style={{ color: "#F9FAFB" }}>
-          Family ID: {myFamilyId ?? "—"}
-        </Text>
-        <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
-          Invite code: {inviteCode ?? "—"}
-        </Text>
-        <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
-          Family owner:{" "}
-          {familyOwnerUid
-            ? familyOwnerUid === uid
-              ? "You"
-              : `${familyOwnerUid.slice(0, 6)}…`
-            : "Not set"}
-        </Text>
-
-        <TouchableOpacity
-          onPress={handleShareInvite}
-          disabled={!inviteCode}
-          style={{ marginTop: 8 }}
+        <Text
+          style={{
+            fontWeight: "700",
+            fontSize: 20,
+            color: "#ffffff",
+            marginBottom: 12,
+          }}
         >
-          <Text
-            style={{
-              color: inviteCode ? "#60A5FA" : "#4B5563",
-              fontWeight: "600",
-            }}
-          >
-            Share invite
-          </Text>
-        </TouchableOpacity>
+          Families
+        </Text>
 
-        {!isOwner && myFamilyId && uid && (
-          <View style={{ marginTop: 8 }}>
-            <Button title="Make me Family Owner" onPress={handleBecomeOwner} />
-          </View>
-        )}
-
+        {/* ===================== MAIN FAMILY CARD ===================== */}
         <View
           style={{
-            flexDirection: "row",
-            marginTop: 12,
-            gap: 8,
-            justifyContent: "space-between",
-            flexWrap: "wrap",
+            borderRadius: 12,
+            padding: 12,
+            backgroundColor: "#111827",
+            marginBottom: 12,
           }}
         >
-          <Button
-            title="Open Family Treasury"
-            onPress={() => navigation.navigate("FamilyTreasury")}
-            disabled={!myFamilyId}
-          />
-          <Button
-            title="Family Chats"
-            onPress={() => navigation.navigate("FamilyChatList")}
-            disabled={!myFamilyId}
-          />
-          <Button
-            title="Children & locked"
-            onPress={() => navigation.navigate("FamilyChildren")}
-            disabled={!myFamilyId}
-          />
-          <Button
-            title="Family Tasks"
-            onPress={() => navigation.navigate("FamilyTasks")}
-            disabled={!myFamilyId}
-          />
-        </View>
-      </View>
+          <Text style={{ color: "#9CA3AF", marginBottom: 4 }}>My family</Text>
+          <Text style={{ color: "#F9FAFB" }}>
+            Family ID: {myFamilyId ?? "—"}
+          </Text>
+          <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
+            Invite code: {inviteCode ?? "—"}
+          </Text>
+          <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
+            Family owner:{" "}
+            {familyOwnerUid
+              ? familyOwnerUid === uid
+                ? "You"
+                : `${familyOwnerUid.slice(0, 6)}…`
+              : "Not set"}
+          </Text>
 
-      {/* ===================== CREATE FAMILY ===================== */}
-      <View
-        style={{
-          borderRadius: 12,
-          padding: 12,
-          backgroundColor: "#111827",
-          marginBottom: 12,
-        }}
-      >
-        <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
-          Create new family
-        </Text>
+          <TouchableOpacity
+            onPress={handleShareInvite}
+            disabled={!inviteCode}
+            style={{ marginTop: 8 }}
+          >
+            <Text
+              style={{
+                color: inviteCode ? "#60A5FA" : "#4B5563",
+                fontWeight: "600",
+              }}
+            >
+              Share invite
+            </Text>
+          </TouchableOpacity>
 
-        <TextInput
-          placeholder="Family name"
-          placeholderTextColor="#6B7280"
-          value={name}
-          onChangeText={setName}
-          style={{
-            marginTop: 8,
-            borderWidth: 1,
-            borderColor: "#374151",
-            borderRadius: 8,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            color: "#F9FAFB",
-          }}
-        />
+          {!isOwner && myFamilyId && uid && (
+            <View style={{ marginTop: 8 }}>
+              <Button title="Make me Family Owner" onPress={handleBecomeOwner} />
+            </View>
+          )}
 
-        <View style={{ marginTop: 8 }}>
-          <Button
-            title="Create"
-            onPress={handleCreateFamily}
-            disabled={!name.trim() || loading}
-          />
-        </View>
-      </View>
-
-      {/* ===================== JOIN FAMILY ===================== */}
-      <View
-        style={{
-          borderRadius: 12,
-          padding: 12,
-          backgroundColor: "#111827",
-          marginBottom: 12,
-        }}
-      >
-        <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
-          Join by invite code
-        </Text>
-
-        <TextInput
-          placeholder="CODE"
-          autoCapitalize="characters"
-          placeholderTextColor="#6B7280"
-          value={code}
-          onChangeText={setCode}
-          style={{
-            marginTop: 8,
-            borderWidth: 1,
-            borderColor: "#374151",
-            borderRadius: 8,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            color: "#F9FAFB",
-          }}
-        />
-
-        <View style={{ marginTop: 8 }}>
-          <Button
-            title="Join"
-            onPress={handleJoinFamily}
-            disabled={!code.trim() || loading}
-          />
-        </View>
-      </View>
-
-      {/* ===================== MEMBERS LIST ===================== */}
-      <View
-        style={{
-          flex: 1,
-          borderRadius: 12,
-          padding: 12,
-          backgroundColor: "#111827",
-        }}
-      >
-        <Text style={{ color: "#E5E7EB", fontWeight: "600", marginBottom: 8 }}>
-          Members
-        </Text>
-
-        {loading ? (
-          <Text style={{ color: "#6B7280" }}>Loading…</Text>
-        ) : (
-          <FlatList
-            data={members}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => {
-              const birth = item.birthDate || "—";
-              const age =
-                typeof item.ageYears === "number" ? `${item.ageYears}` : "—";
-              const adult =
-                item.isAdult === undefined
-                  ? "—"
-                  : item.isAdult
-                  ? "Adult"
-                  : "Child";
-              const walletState =
-                item.noWallet === true
-                  ? "Custodial only"
-                  : item.isAdult
-                  ? "Full wallet"
-                  : "Normal";
-
-              const approved =
-                item.approvedByOwner && familyOwnerUid
-                  ? item.approvedByOwner === familyOwnerUid
-                    ? "✓ approved"
-                    : "approved"
-                  : "not approved";
-
-              const canApprove =
-                isOwner &&
-                !!myFamilyId &&
-                !!item.birthDate &&
-                !item.approvedByOwner;
-
-              return (
-                <View style={{ marginVertical: 4 }}>
-                  <Text style={{ color: "#D1D5DB" }}>
-                    • {item.id.slice(0, 6)}… {item.role ? `(${item.role})` : ""}
-                  </Text>
-
-                  <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                    DOB: {birth} • Age: {age} • {adult}
-                  </Text>
-
-                  <Text style={{ color: "#6B7280", fontSize: 12 }}>
-                    Wallet: {walletState} • Status: {approved}
-                  </Text>
-
-                  {canApprove && (
-                    <View style={{ marginTop: 4, maxWidth: 200 }}>
-                      <Button
-                        title="Approve age"
-                        onPress={() =>
-                          handleApproveAge(item.id, !!item.birthDate)
-                        }
-                      />
-                    </View>
-                  )}
-                </View>
-              );
+          <View
+            style={{
+              flexDirection: "row",
+              marginTop: 12,
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
             }}
-            ListEmptyComponent={
-              <Text style={{ color: "#6B7280" }}>No members yet</Text>
-            }
+          >
+            <Button
+              title="Open Family Treasury"
+              onPress={() => navigation.navigate("FamilyTreasury")}
+              disabled={!myFamilyId}
+            />
+            <Button
+              title="Family Chats"
+              onPress={() => navigation.navigate("FamilyChatList")}
+              disabled={!myFamilyId}
+            />
+            <Button
+              title="Children & locked"
+              onPress={() => navigation.navigate("FamilyChildren")}
+              disabled={!myFamilyId}
+            />
+            <Button
+              title="Family Tasks"
+              onPress={() => navigation.navigate("FamilyTasks")}
+              disabled={!myFamilyId}
+            />
+          </View>
+        </View>
+
+        {/* ===================== CREATE FAMILY ===================== */}
+        <View
+          style={{
+            borderRadius: 12,
+            padding: 12,
+            backgroundColor: "#111827",
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
+            Create new family
+          </Text>
+
+          <TextInput
+            placeholder="Family name"
+            placeholderTextColor="#6B7280"
+            value={name}
+            onChangeText={setName}
+            style={{
+              marginTop: 8,
+              borderWidth: 1,
+              borderColor: "#374151",
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              color: "#F9FAFB",
+            }}
           />
-        )}
-      </View>
+
+          <View style={{ marginTop: 8 }}>
+            <Button
+              title="Create"
+              onPress={handleCreateFamily}
+              disabled={!name.trim() || loading}
+            />
+          </View>
+        </View>
+
+        {/* ===================== JOIN FAMILY ===================== */}
+        <View
+          style={{
+            borderRadius: 12,
+            padding: 12,
+            backgroundColor: "#111827",
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
+            Join by invite code
+          </Text>
+
+          <TextInput
+            placeholder="CODE"
+            autoCapitalize="characters"
+            placeholderTextColor="#6B7280"
+            value={code}
+            onChangeText={setCode}
+            style={{
+              marginTop: 8,
+              borderWidth: 1,
+              borderColor: "#374151",
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              color: "#F9FAFB",
+            }}
+          />
+
+          <View style={{ marginTop: 8 }}>
+            <Button
+              title="Join"
+              onPress={handleJoinFamily}
+              disabled={!code.trim() || loading}
+            />
+          </View>
+        </View>
+
+        {/* ===================== MEMBERS LIST ===================== */}
+        <View
+          style={{
+            borderRadius: 12,
+            padding: 12,
+            backgroundColor: "#111827",
+          }}
+        >
+          <Text
+            style={{ color: "#E5E7EB", fontWeight: "600", marginBottom: 8 }}
+          >
+            Members
+          </Text>
+
+          {loading ? (
+            <Text style={{ color: "#6B7280" }}>Loading…</Text>
+          ) : (
+            <FlatList
+              data={members}
+              keyExtractor={(i) => i.id}
+              scrollEnabled={false} // скроллит внешний ScrollView
+              renderItem={({ item }) => {
+                const birth = item.birthDate || "—";
+                const age =
+                  typeof item.ageYears === "number"
+                    ? `${item.ageYears}`
+                    : "—";
+                const adult =
+                  item.isAdult === undefined
+                    ? "—"
+                    : item.isAdult
+                    ? "Adult"
+                    : "Child";
+                const walletState =
+                  item.noWallet === true
+                    ? "Custodial only"
+                    : item.isAdult
+                    ? "Full wallet"
+                    : "Normal";
+
+                const approved =
+                  item.approvedByOwner && familyOwnerUid
+                    ? item.approvedByOwner === familyOwnerUid
+                      ? "✓ approved"
+                      : "approved"
+                    : "not approved";
+
+                const canApprove =
+                  isOwner &&
+                  !!myFamilyId &&
+                  !!item.birthDate &&
+                  !item.approvedByOwner;
+
+                return (
+                  <View style={{ marginVertical: 4 }}>
+                    <Text style={{ color: "#D1D5DB" }}>
+                      • {item.id.slice(0, 6)}…{" "}
+                      {item.role ? `(${item.role})` : ""}
+                    </Text>
+
+                    <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                      DOB: {birth} • Age: {age} • {adult}
+                    </Text>
+
+                    <Text style={{ color: "#6B7280", fontSize: 12 }}>
+                      Wallet: {walletState} • Status: {approved}
+                    </Text>
+
+                    {canApprove && (
+                      <View style={{ marginTop: 4, maxWidth: 200 }}>
+                        <Button
+                          title="Approve age"
+                          onPress={() =>
+                            handleApproveAge(item.id, !!item.birthDate)
+                          }
+                        />
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                <Text style={{ color: "#6B7280" }}>No members yet</Text>
+              }
+            />
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }

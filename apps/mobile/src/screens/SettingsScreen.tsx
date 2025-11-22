@@ -1,7 +1,14 @@
 ﻿// apps/mobile/src/screens/SettingsScreen.tsx
 
 import React, { useState, useEffect } from "react";
-import { View, Text, Button, Alert, Switch } from "react-native";
+import {
+  View,
+  Text,
+  Button,
+  Alert,
+  Switch,
+  ScrollView,
+} from "react-native";
 import { scheduleDailyReminder } from "../lib/notifications";
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -13,7 +20,6 @@ import {
 import {
   updateFamilySettings,
   getFamily,
-  getCurrentUserFamilyId,
   ensureCurrentUserFamily,
 } from "../lib/families";
 import { getReferralLink, shareReferralLink } from "../lib/user";
@@ -83,22 +89,22 @@ export default function SettingsScreen({ navigation }: Props) {
           } catch (e) {}
         }
 
-// Load / ensure family
-const { fid: myFid, created } = await ensureCurrentUserFamily();
-setFid(myFid);
+        // Load / ensure family
+        const { fid: myFid, created } = await ensureCurrentUserFamily();
+        setFid(myFid);
 
-if (created) {
-  console.log("[Settings] Created default family for user:", myFid);
-}
+        if (created) {
+          console.log("[Settings] Created default family for user:", myFid);
+        }
 
-if (myFid) {
-  const fam = await getFamily(myFid);
+        if (myFid) {
+          const fam = await getFamily(myFid);
 
-  setIsOwner(fam?.ownerUid === uid);
-  setFindFriendsEnabled(fam?.findFriendsEnabled ?? false);
-}
+          setIsOwner(fam?.ownerUid === uid);
+          setFindFriendsEnabled(fam?.findFriendsEnabled ?? false);
+        }
 
-        // Referral link — FIXED
+        // Referral link
         const link = await getReferralLink();
         setRefLink(link.url);
       } catch (e) {
@@ -154,138 +160,148 @@ if (myFid) {
   }
 
   return (
-    <View
-      style={{ padding: 24, gap: 16, flex: 1, backgroundColor: "#0b0c0f" }}
-    >
-      <Text style={{ fontWeight: "700", fontSize: 20, color: "#fff" }}>
-        Settings
-      </Text>
-
-      {/* REMINDERS */}
-      <View style={{ gap: 8 }}>
-        <Text style={{ color: "#9ca3af" }}>
-          Daily reminders help stay consistent with walking goals.
-        </Text>
-        <Button title="Daily 9:00 AM" onPress={() => onSchedule(9, 0)} />
-        <Button title="Daily 8:00 PM" onPress={() => onSchedule(20, 0)} />
-        <Text style={{ color: "#6b7280" }}>
-          {scheduled ? "Reminder scheduled." : "No reminder yet."}
-        </Text>
-      </View>
-
-      {/* LOCATION */}
-      <View style={{ marginTop: 12 }}>
-        <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
-          Location & Safety
+    <View style={{ flex: 1, backgroundColor: "#020617" }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: 24,
+          paddingBottom: 32,
+          gap: 16,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={{ fontWeight: "700", fontSize: 20, color: "#fff" }}>
+          Settings
         </Text>
 
-        {loadingProfile ? (
-          <Text style={{ color: "#9ca3af" }}>Loading…</Text>
-        ) : forceTracking || isAdult === false ? (
+        {/* REMINDERS */}
+        <View style={{ gap: 8 }}>
           <Text style={{ color: "#9ca3af" }}>
-            Location tracking for children is always ON.
+            Daily reminders help stay consistent with walking goals.
           </Text>
-        ) : (
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginTop: 8,
-            }}
-          >
-            <Text style={{ color: "#e5e7eb" }}>Enable GPS ping</Text>
-            <Switch
-              value={trackingEnabled}
-              onValueChange={handleToggleTracking}
+          <Button title="Daily 9:00 AM" onPress={() => onSchedule(9, 0)} />
+          <Button title="Daily 8:00 PM" onPress={() => onSchedule(20, 0)} />
+          <Text style={{ color: "#6b7280" }}>
+            {scheduled ? "Reminder scheduled." : "No reminder yet."}
+          </Text>
+        </View>
+
+        {/* LOCATION */}
+        <View style={{ marginTop: 12 }}>
+          <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
+            Location & Safety
+          </Text>
+
+          {loadingProfile ? (
+            <Text style={{ color: "#9ca3af" }}>Loading…</Text>
+          ) : forceTracking || isAdult === false ? (
+            <Text style={{ color: "#9ca3af" }}>
+              Location tracking for children is always ON.
+            </Text>
+          ) : (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 8,
+              }}
+            >
+              <Text style={{ color: "#e5e7eb" }}>Enable GPS ping</Text>
+              <Switch
+                value={trackingEnabled}
+                onValueChange={handleToggleTracking}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* FIND FRIENDS */}
+        {isOwner && !!fid && (
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
+              Family Discovery
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 8,
+              }}
+            >
+              <Text style={{ color: "#e5e7eb" }}>
+                Enable Find Families Nearby
+              </Text>
+              <Switch
+                value={findFriendsEnabled}
+                onValueChange={handleToggleFindFriends}
+              />
+            </View>
+
+            <Button
+              title="Family Friends"
+              onPress={() => navigation.navigate("FamilyFriends")}
+              disabled={!findFriendsEnabled}
             />
           </View>
         )}
-      </View>
 
-      {/* FIND FRIENDS */}
-      {isOwner && !!fid && (
-        <View style={{ marginTop: 12 }}>
+        {/* REFERRAL */}
+        <View style={{ marginTop: 20 }}>
           <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
-            Family Discovery
+            Referral Program
           </Text>
 
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginTop: 8,
-            }}
-          >
-            <Text style={{ color: "#e5e7eb" }}>
-              Enable Find Families Nearby
-            </Text>
-            <Switch
-              value={findFriendsEnabled}
-              onValueChange={handleToggleFindFriends}
+          <Text style={{ color: "#9ca3af", marginTop: 4 }}>
+            Invite families and earn rewards.
+          </Text>
+
+          <Text style={{ color: "#e5e7eb", marginTop: 8 }}>
+            Your referral link:
+          </Text>
+
+          <Text style={{ color: "#60a5fa", marginTop: 4 }}>
+            {refLink || "—"}
+          </Text>
+
+          <Button
+            title="Share invite link"
+            onPress={() => shareReferralLink()}
+          />
+        </View>
+
+        {/* AI ASSISTANT */}
+        <View style={{ marginTop: 24 }}>
+          <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
+            AI Assistant
+          </Text>
+          <Button
+            title="Open AI Assistant"
+            onPress={() => navigation.navigate("Assistant")}
+          />
+        </View>
+
+        {/* WALLET & NFT SECTION */}
+        <View style={{ marginTop: 24 }}>
+          <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
+            Wallet
+          </Text>
+
+          <Text style={{ color: "#9ca3af", marginTop: 4 }}>
+            View your on-chain activity and NFT collection.
+          </Text>
+
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <Button
+              title="View Activity"
+              onPress={() => navigation.navigate("WalletActivity")}
+            />
+            <Button
+              title="My NFTs"
+              onPress={() => navigation.navigate("NFTGallery")}
             />
           </View>
-
-          <Button
-            title="Family Friends"
-            onPress={() => navigation.navigate("FamilyFriends")}
-            disabled={!findFriendsEnabled}
-          />
         </View>
-      )}
-
-      {/* REFERRAL */}
-      <View style={{ marginTop: 20 }}>
-        <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
-          Referral Program
-        </Text>
-
-        <Text style={{ color: "#9ca3af", marginTop: 4 }}>
-          Invite families and earn rewards.
-        </Text>
-
-        <Text style={{ color: "#e5e7eb", marginTop: 8 }}>
-          Your referral link:
-        </Text>
-
-        <Text style={{ color: "#60a5fa", marginTop: 4 }}>
-          {refLink || "—"}
-        </Text>
-
-        <Button title="Share invite link" onPress={() => shareReferralLink()} />
-      </View>
-
-      {/* AI ASSISTANT */}
-      <View style={{ marginTop: 24 }}>
-        <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
-          AI Assistant
-        </Text>
-        <Button
-          title="Open AI Assistant"
-          onPress={() => navigation.navigate("Assistant")}
-        />
-      </View>
-
-      {/* WALLET & NFT SECTION */}
-      <View style={{ marginTop: 24 }}>
-        <Text style={{ fontWeight: "600", fontSize: 16, color: "#fff" }}>
-          Wallet
-        </Text>
-
-        <Text style={{ color: "#9ca3af", marginTop: 4 }}>
-          View your on-chain activity and NFT collection.
-        </Text>
-
-        <View style={{ marginTop: 8, gap: 8 }}>
-          <Button
-            title="View Activity"
-            onPress={() => navigation.navigate("WalletActivity")}
-          />
-          <Button
-            title="My NFTs"
-            onPress={() => navigation.navigate("NFTGallery")}
-          />
-        </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }

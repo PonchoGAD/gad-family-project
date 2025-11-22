@@ -16,6 +16,7 @@ import {
   onSnapshot,
   DocumentData,
 } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
 
 type GasHistoryItem = {
   id: string;
@@ -46,39 +47,51 @@ export default function GasHistoryScreen() {
   const [items, setItems] = useState<GasHistoryItem[]>([]);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    let unsub: (() => void) | null = null;
 
-    const ref = collection(db, "gasStipend", user.uid, "items");
-    const q = query(ref, orderBy("createdAt", "desc"));
+    (async () => {
+      try {
+        let user = auth.currentUser;
+        if (!user) {
+          const res = await signInAnonymously(auth);
+          user = res.user;
+        }
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const out: GasHistoryItem[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data() as DocumentData;
-          out.push({
-            id: docSnap.id,
-            amountWei: Number(data.amountWei ?? 0) || 0,
-            tier: data.tier,
-            createdAt: data.createdAt,
-          });
-        });
-        setItems(out);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("gas history error", err);
-        Alert.alert("Gas History", "Failed to load gas history");
+        const ref = collection(db, "gasStipend", user.uid, "items");
+        const q = query(ref, orderBy("createdAt", "desc"));
+
+        unsub = onSnapshot(
+          q,
+          (snap) => {
+            const out: GasHistoryItem[] = [];
+            snap.forEach((docSnap) => {
+              const data = docSnap.data() as DocumentData;
+              out.push({
+                id: docSnap.id,
+                amountWei: Number(data.amountWei ?? 0) || 0,
+                tier: data.tier,
+                createdAt: data.createdAt,
+              });
+            });
+            setItems(out);
+            setLoading(false);
+          },
+          (err) => {
+            console.error("gas history error", err);
+            Alert.alert("Gas History", "Failed to load gas history");
+            setLoading(false);
+          }
+        );
+      } catch (e) {
+        console.log("GasHistoryScreen init error", e);
+        Alert.alert("Gas History", "Failed to initialize gas history");
         setLoading(false);
       }
-    );
+    })();
 
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   if (loading) {

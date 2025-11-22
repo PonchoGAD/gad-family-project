@@ -31,7 +31,7 @@ export default function FamilyTreasuryScreen() {
           user = res.user;
         }
 
-        // Load familyId from users/{uid}
+        // Load familyId
         const uSnap = await getDoc(doc(db, "users", user.uid));
         const fid = (uSnap.data() as any)?.familyId ?? null;
         setFamilyId(fid);
@@ -41,8 +41,11 @@ export default function FamilyTreasuryScreen() {
           return;
         }
 
-        // Read FamilyVault doc: families/{fid}/vault
-        const vSnap = await getDoc(doc(db, "families", fid, "vault"));
+        // FIX: read families/{fid}/vault/main
+        const vSnap = await getDoc(
+          doc(db, "families", fid, "vault", "main")
+        );
+
         if (vSnap.exists()) {
           setVault(vSnap.data() as any);
         } else {
@@ -109,7 +112,7 @@ export default function FamilyTreasuryScreen() {
             Family Vault
           </Text>
           <Text style={{ color: "#f87171", marginTop: 4 }}>
-            {vaultError || "Failed to load family vault"}
+            {vaultError}
           </Text>
         </View>
       );
@@ -130,16 +133,14 @@ export default function FamilyTreasuryScreen() {
           </Text>
           <Text style={{ color: "#9ca3af", fontSize: 13 }}>
             Vault data is not initialized yet. Once your family starts earning
-            and locking points, high-level stats will appear here.
+            and locking points, statistics will appear here.
           </Text>
         </View>
       );
     }
 
-    const totalLocked =
-      (vault.totalLockedPoints as number | undefined) ?? undefined;
-    const totalReleased =
-      (vault.totalReleasedPoints as number | undefined) ?? undefined;
+    const totalLocked = vault.totalLockedPoints ?? "—";
+    const totalReleased = vault.totalReleasedPoints ?? "—";
 
     return (
       <View
@@ -159,21 +160,16 @@ export default function FamilyTreasuryScreen() {
 
         <View style={{ marginTop: 8 }}>
           <Text style={{ color: "#e5e7eb" }}>
-            Total locked points:{" "}
-            {totalLocked !== undefined ? totalLocked : "—"}
+            Total locked points: {totalLocked}
           </Text>
           <Text style={{ color: "#e5e7eb", marginTop: 2 }}>
-            Total released points:{" "}
-            {totalReleased !== undefined ? totalReleased : "—"}
+            Total released points: {totalReleased}
           </Text>
         </View>
 
         {vault.lastUpdatedAt && (
           <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 6 }}>
-            Last update:{" "}
-            {typeof vault.lastUpdatedAt === "string"
-              ? vault.lastUpdatedAt
-              : JSON.stringify(vault.lastUpdatedAt)}
+            Last update: {JSON.stringify(vault.lastUpdatedAt)}
           </Text>
         )}
       </View>
@@ -194,11 +190,9 @@ export default function FamilyTreasuryScreen() {
           treasury lock schedule and public proof of lock.
         </Text>
 
-        {/* Global project-level vesting (TeamFinance / Treasury SAFE) */}
         <LockTimer />
         <ProofOfLock />
 
-        {/* Family-specific vault (points, future 80/20, children locks, etc.) */}
         {renderVaultCard()}
       </View>
     </ScrollView>

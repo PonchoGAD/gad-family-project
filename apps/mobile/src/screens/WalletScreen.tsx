@@ -40,13 +40,17 @@ export default function WalletScreen({ navigation }: any) {
       const familyId = data.familyId ?? null;
       setFid(familyId);
 
+      // ✅ FIX: читаем lock из families/{fid}/vault/main/locked/{uid}
       if (familyId) {
-        const lsnap = await getDoc(
-          doc(db, "families", familyId, "vault", "locked", uid)
+        const lockedSnap = await getDoc(
+          doc(db, "families", familyId, "vault", "main", "locked", uid)
         );
-        setLocked(lsnap.data()?.pointsLocked ?? 0);
+        setLocked(lockedSnap.exists() ? lockedSnap.data()?.pointsLocked ?? 0 : 0);
+      } else {
+        setLocked(0);
       }
 
+      // child-tier → без кошелька
       if (currentTier === "child") {
         setAddr("—");
         setBal("—");
@@ -76,7 +80,7 @@ export default function WalletScreen({ navigation }: any) {
         padding: 24,
         gap: 14,
         flex: 1,
-        backgroundColor: "#0b0c0f",
+        backgroundColor: "#020617",
       }}
     >
       <Text style={{ fontWeight: "700", fontSize: 18, color: "#fff" }}>
@@ -107,9 +111,7 @@ export default function WalletScreen({ navigation }: any) {
 
       {/* Gas stipend */}
       <View style={{ marginTop: 16 }}>
-        <Text
-          style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}
-        >
+        <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
           Gas Stipend (BNB)
         </Text>
         <Text style={{ color: "#9ca3af", marginTop: 4 }}>
@@ -130,8 +132,6 @@ export default function WalletScreen({ navigation }: any) {
             title="Set up / Backup wallet"
             onPress={() => navigation.navigate("WalletOnboarding")}
           />
-
-          {/* Новые действия кошелька — история и NFT */}
           <Button
             title="History"
             onPress={() => navigation.navigate("WalletActivity")}

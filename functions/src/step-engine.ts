@@ -17,7 +17,7 @@ function getRateForDay(d: any): number {
 /**
  * Пишем агрегированные данные в семейный сейф:
  *  - families/{fid}/ledger/{date_uid}
- *  - families/{fid}/vault
+ *  - families/{fid}/vault/main   ← FIX: document, а не коллекция
  *
  * Сейчас вызывается ТОЛЬКО если dryRun = false.
  */
@@ -36,8 +36,12 @@ async function writeFamilyLedgerAndVault(
   if (!familyId) return;
 
   const ledgerId = `${date}_${uid}`;
+
+  // families/{fid}/ledger/{date_uid}
   const ledgerRef = db.doc(`families/${familyId}/ledger/${ledgerId}`);
-  const vaultRef = db.doc(`families/${familyId}/vault`);
+
+  // FIX: families/{fid}/vault/main (4 сегмента, валидный документ)
+  const vaultRef = db.doc(`families/${familyId}/vault/main`);
 
   // 2) запись в ledger
   await ledgerRef.set(
@@ -62,7 +66,9 @@ async function writeFamilyLedgerAndVault(
 
 /**
  * Dry-run расчёт наград на дату (по всем пользователям)
- * ВАЖНО: summary теперь пишем в rewards/{uid} (2 сегмента, ок)
+ * ВАЖНО:
+ *  - шаги берём из dailySteps/{uid}/days/{date}
+ *  - summary пишем в rewards/{uid} (2 сегмента, ок)
  */
 export async function runDailyDryRun(
   tz = process.env.APP_TIMEZONE || "America/New_York" // США, как договорились
@@ -78,12 +84,13 @@ export async function runDailyDryRun(
   const ledgerOps: Promise<unknown>[] = [];
   let processed = 0;
 
-  for (const doc of usersSnap.docs) {
-    const uid = doc.id;
-    const profile = (doc.data() as Partial<UserProfile>) || {};
+  for (const docSnap of usersSnap.docs) {
+    const uid = docSnap.id;
+    const profile = (docSnap.data() as Partial<UserProfile>) || {};
     const plan = (profile.subscription || "free") as "free" | "plus" | "pro";
 
-    const stepsDoc = await db.doc(`steps/${uid}/days/${date}`).get();
+    // FIX: dailySteps/{uid}/days/{date}
+    const stepsDoc = await db.doc(`dailySteps/${uid}/days/${date}`).get();
     const rawSteps = Number(stepsDoc.get("steps") || 0);
 
     const cap = MAX_STEPS[plan];
@@ -109,7 +116,7 @@ export async function runDailyDryRun(
     const rewardRef = db.doc(`rewards/${uid}/days/${date}`);
     batch.set(rewardRef, reward, { merge: true });
 
-    // СВОДКА — теперь в rewards/{uid} (ДВА сегмента ⇒ валидно)
+    // СВОДКА — в rewards/{uid} (ДВА сегмента ⇒ валидно)
     const aggRef = db.doc(`rewards/${uid}`);
     batch.set(
       aggRef,
@@ -121,7 +128,7 @@ export async function runDailyDryRun(
       { merge: true }
     );
 
-    // Задел под семейный сейф: пишем только в боевом режиме
+    // Семейный сейф: пишем только в боевом режиме
     if (!dryRun && gad > 0) {
       ledgerOps.push(writeFamilyLedgerAndVault(db, uid, date, gad));
     }

@@ -124,7 +124,7 @@ service cloud.firestore {
         }
       }
 
-      /* ----- FAMILY VAULT & LEDGER ----- */
+      /* ----- FAMILY VAULT & LEDGER (СТАРЫЕ ПРАВИЛА) ----- */
       match /vault {
         allow read: if request.auth != null &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
@@ -156,6 +156,24 @@ service cloud.firestore {
         allow read: if request.auth != null &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
+      }
+
+      /* ----- FAMILY VAULT (НОВАЯ СТРУКТУРА: vault/main + locked) ----- */
+      // families/{fid}/vault/main
+      match /vault/{docId} {
+        allow read: if request.auth != null &&
+          (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
+        allow write: if false;
+
+        // families/{fid}/vault/main/locked/{uid}
+        match /locked/{uid} {
+          allow read: if request.auth != null && (
+            request.auth.uid == uid ||
+            isOwnerOfFamily(request.auth.uid, fid) ||
+            isAdultInFamily(request.auth.uid, fid)
+          );
+          allow write: if false;
+        }
       }
 
       /* ----- FAMILY CHATS (multi-family) ----- */
@@ -229,7 +247,8 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    match /dailySteps/{uid}/{date} {
+    // ❗ FIX: новая структура шагов: dailySteps/{uid}/days/{date}
+    match /dailySteps/{uid}/days/{date} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
@@ -251,6 +270,16 @@ service cloud.firestore {
     match /referrals/{uid}/items/{itemId} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
+    }
+
+    /* ----- REWARDS (для step-engine и RewardsScreen) ----- */
+    // rewards/{uid} + rewards/{uid}/days/{date}
+    match /rewards/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /days/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
 
     /* ----- GAS STIPEND (для GasHistoryScreen и applyGasStipend) ----- */
