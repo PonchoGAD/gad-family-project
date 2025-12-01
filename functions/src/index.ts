@@ -10,19 +10,58 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { ethers } from "ethers";
 
+// ---------- Push & Alerts ----------
+export { pushToUser, pushToFamily, onSafeZoneEvent } from "./notifications.js";
+// Если ты уже вынес onSafeZoneEvent в safeZones.ts — тогда так:
+// export { onSafeZoneEvent } from "./safeZones.js";
+
+export { onFamilyAlert } from "./familyAlerts.js";
+export { onStepRewardCreated } from "./stepPushes.js";
+
 // ---------- Assistant ----------
 export { assistantChat } from "./assistant.js";
 
 // ---------- New feature modules (re-exports) ----------
-export { familySetBirthDate, familyApproveMemberAge } from "./family-age.js";
-export { applyReferralBonus, generateReferralCode } from "./referrals.js";
-export { applyGasStipend, setSubscriptionTier } from "./subscriptions.js";
-export { requestExchange, getExchangeLimits } from "./exchange-fund.js";
+export {
+  familySetBirthDate,
+  familyApproveMemberAge,
+} from "./family-age.js";
+export {
+  applyReferralBonus,
+  generateReferralCode,
+} from "./referrals.js";
+export {
+  applyGasStipend,
+  setSubscriptionTier,
+} from "./subscriptions.js";
+export {
+  requestExchange,
+  getExchangeLimits,
+} from "./exchange-fund.js";
 export { createFund, depositToFund, withdrawFund } from "./funds.js";
 
-// Step engine
+// GEO / CLEANUP / SAFE-ZONE ALERTS
+export { cleanupLocations } from "./cleanupLocations.js";
+export { onLocationZoneChange } from "./onLocationZoneChange.js";
+
+// ---------------------------------------------------------------------------
+// STEP ENGINE V1 (LEGACY DRY-RUN)
+// ---------------------------------------------------------------------------
+// LEGACY STEP ENGINE V1:
+// - used only for early dry-run / debug
+// - product UI uses StepEngine V2 (stepEngineCron + stepEngineRunV2)
+// - НЕ вызывать из мобильного/веб-клиента через onCall!
+//   Доступно только как:
+//     • stepEngineDaily (cron по TZ)
+//     • stepEngineRunNowHttp (HTTP endpoint для ручной отладки)
+// ---------------------------------------------------------------------------
 import { runDailyDryRun } from "./step-engine.js";
-import { US_REGIONS, PUBLIC_TREASURY_CONFIG, TreasuryPublic } from "./config.js";
+
+import {
+  US_REGIONS,
+  PUBLIC_TREASURY_CONFIG,
+  TreasuryPublic,
+} from "./config.js";
 
 // ---------- Firebase admin init ----------
 if (!admin.apps.length) {
@@ -41,7 +80,6 @@ setGlobalOptions({
 // ============================================================================
 // GEO PING (имя совпадает с клиентским "geo_ping")
 // ============================================================================
-
 export const geo_ping = onCall(async (req) => {
   const uid = req.auth?.uid || "anonymous";
 
@@ -74,10 +112,20 @@ export const geo_ping = onCall(async (req) => {
 });
 
 // ============================================================================
-// STEP ENGINE (daily dry-run of step rewards)
+// STEP ENGINE V1 (legacy dry-run of step rewards)
+// ============================================================================
+//
+// ❗ LEGACY ONLY — НЕ ИСПОЛЬЗУЕТСЯ ПРОДУКТОВЫМ UI:
+//   - stepEngineDaily: cron по TZ, запускает runDailyDryRun (V1);
+//   - stepEngineRunNowHttp: HTTP endpoint для ручной проверки/отладки.
+//
+// Product UI использует V2:
+//   - stepEngineCron (cron, V2)
+//   - stepEngineRunNow (callable, V2, глобальный dry-run за дату)
+//   - stepEngineRunV2 (callable per-user, V2)
 // ============================================================================
 
-// CRON: every day at 23:50 by TZ
+// CRON: every day at 23:50 by TZ — старый движок V1
 export const stepEngineDaily = onSchedule(
   {
     schedule: "50 23 * * *",
@@ -85,11 +133,11 @@ export const stepEngineDaily = onSchedule(
   },
   async () => {
     const res = await runDailyDryRun(TZ);
-    console.log("stepEngineDaily", res);
+    console.log("stepEngineDaily (LEGACY V1)", res);
   }
 );
 
-// Manual run via HTTP (GET)
+// Manual run via HTTP (GET) — также V1 dry-run (для отладки)
 export const stepEngineRunNowHttp = onRequest(async (_req, res) => {
   try {
     const out = await runDailyDryRun(TZ);
@@ -103,15 +151,10 @@ export const stepEngineRunNowHttp = onRequest(async (_req, res) => {
   }
 });
 
-// Manual run via callable (name matches client "stepEngineRunNow")
-export const stepEngineRunNow = onCall(async () => {
-  const out = await runDailyDryRun(TZ);
-  return { ok: true, ...(out as any) } as {
-    ok: boolean;
-    processed: number;
-    date: string;
-  };
-});
+// ВАЖНО:
+//  - старый callable stepEngineRunNow (V1) здесь удалён;
+//  - новое имя stepEngineRunNow экспортируется ниже из "./steps/stepEngineRunNow"
+//    и использует V2-движок (runStepEngineForDate).
 
 // ============================================================================
 // TREASURY / PAYOUTS / SAFE HELPERS
@@ -147,7 +190,11 @@ function isAdmin(uid?: string | null): boolean {
 }
 
 // Build tranche dates array (YYYY-MM-DD)
-function trancheDates(startISO: string, count: number, months: number): string[] {
+function trancheDates(
+  startISO: string,
+  count: number,
+  months: number
+): string[] {
   const dates: string[] = [];
   const start = new Date(startISO + "T00:00:00Z");
 
@@ -162,7 +209,11 @@ function trancheDates(startISO: string, count: number, months: number): string[]
 
 // Calculate next unlock info for UI
 function nextUnlockInfo(cfg: TreasuryPublic) {
-  const dates = trancheDates(cfg.LOCK_START_ISO, cfg.TRANCHES, cfg.MONTHS_BETWEEN);
+  const dates = trancheDates(
+    cfg.LOCK_START_ISO,
+    cfg.TRANCHES,
+    cfg.MONTHS_BETWEEN
+  );
   const now = new Date().toISOString().slice(0, 10);
   const next = dates.find((d) => d >= now) || null;
   const index = next ? dates.indexOf(next) : dates.length - 1;
@@ -230,12 +281,22 @@ export const weeklyPayout = onSchedule(
   {
     region: "us-east4",
     schedule: "0 22 * * 5",
-    secrets: [BSC_RPC_URL, PAYOUT_PK, GAD_TOKEN_ADDRESS, DISTRIBUTION_SAFE, TOKEN_DECIMALS],
+    secrets: [
+      BSC_RPC_URL,
+      PAYOUT_PK,
+      GAD_TOKEN_ADDRESS,
+      DISTRIBUTION_SAFE,
+      TOKEN_DECIMALS,
+    ],
   },
   async () => {
     const provider = new ethers.JsonRpcProvider(BSC_RPC_URL.value());
     const signer = new ethers.Wallet(PAYOUT_PK.value(), provider);
-    const token = new ethers.Contract(GAD_TOKEN_ADDRESS.value(), ERC20_ABI, signer);
+    const token = new ethers.Contract(
+      GAD_TOKEN_ADDRESS.value(),
+      ERC20_ABI,
+      signer
+    );
 
     const db = admin.firestore();
 
@@ -333,7 +394,11 @@ export const adminDoApprove = onCall(
 
     const provider = new ethers.JsonRpcProvider(BSC_RPC_URL.value());
     const signer = new ethers.Wallet(PAYOUT_PK.value(), provider);
-    const token = new ethers.Contract(GAD_TOKEN_ADDRESS.value(), ERC20_ABI, signer);
+    const token = new ethers.Contract(
+      GAD_TOKEN_ADDRESS.value(),
+      ERC20_ABI,
+      signer
+    );
 
     const dec = Number(TOKEN_DECIMALS.value() || 18);
     const amount = ethers.parseUnits(amountRaw, dec);
@@ -346,4 +411,11 @@ export const adminDoApprove = onCall(
 );
 
 // ---------- Final exports ----------
+
+// Family vault helpers
 export { familySetOwner, familyGetInfo };
+
+// Step Engine V2 (боевой движок)
+export { stepEngineCron } from "./stepEngineCron.js"; // cron V2 по всем
+export { stepEngineRunNow } from "./steps/stepEngineRunNow.js"; // callable V2 (global per-date)
+export { stepEngineRunV2 } from "./steps/stepEngineRunV2.js"; // callable V2 (per-user)

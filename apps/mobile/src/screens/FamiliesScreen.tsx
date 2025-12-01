@@ -5,7 +5,6 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   Alert,
   FlatList,
   TouchableOpacity,
@@ -25,6 +24,8 @@ import {
 } from "firebase/firestore";
 import { signInAnonymously } from "firebase/auth";
 import { fn } from "../lib/functionsClient";
+import { useTheme } from "../wallet/ui/theme";
+import { useActiveUid, useIsDemo } from "../demo/DemoContext";
 
 type Member = {
   id: string;
@@ -34,9 +35,18 @@ type Member = {
   isAdult?: boolean;
   noWallet?: boolean;
   approvedByOwner?: string | null;
+  lastSeen?: number; // timestamp (ms)
 };
 
-export default function FamiliesScreen({ navigation }: any) {
+type Props = {
+  navigation: any;
+};
+
+export default function FamiliesScreen({ navigation }: Props) {
+  const G = useTheme();
+  const { uid: ctxUid } = useActiveUid();
+  const isDemo = useIsDemo();
+
   const [uid, setUid] = useState<string | null>(null);
   const [myFamilyId, setMyFamilyId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -54,18 +64,26 @@ export default function FamiliesScreen({ navigation }: any) {
 
     (async () => {
       try {
-        // ensure user
-        let user = auth.currentUser;
-        if (!user) {
-          const res = await signInAnonymously(auth);
-          user = res.user;
-        }
-        setUid(user.uid);
+        // определяем uid с учётом демо
+        let currentUid = ctxUid;
 
-        // ensure user doc
-        const uRef = doc(db, "users", user.uid);
+        if (!currentUid) {
+          // fallback: анонимка, если пользователь ещё не авторизован и не в демо
+          const res = await signInAnonymously(auth);
+          currentUid = res.user.uid;
+        }
+
+        if (!currentUid) {
+          setLoading(false);
+          return;
+        }
+
+        setUid(currentUid);
+
+        // ensure user doc (только вне демо, чтобы не ломать подготовленные демо-доки)
+        const uRef = doc(db, "users", currentUid);
         const uSnap = await getDoc(uRef);
-        if (!uSnap.exists()) {
+        if (!uSnap.exists() && !isDemo) {
           await setDoc(
             uRef,
             {
@@ -82,20 +100,30 @@ export default function FamiliesScreen({ navigation }: any) {
 
         // family
         if (fid) {
-          const famRef = doc(db, "families", fid);
-          const famSnap = await getDoc(famRef);
-          if (famSnap.exists()) {
-            const famData = famSnap.data() as any;
-            setInviteCode(famData?.inviteCode ?? null);
-            setFamilyOwnerUid(famData?.ownerUid ?? null);
+          try {
+            const famRef = doc(db, "families", fid);
+            const famSnap = await getDoc(famRef);
+            if (famSnap.exists()) {
+              const famData = famSnap.data() as any;
+              setInviteCode(famData?.inviteCode ?? null);
+              setFamilyOwnerUid(famData?.ownerUid ?? null);
+            }
+          } catch (e) {
+            console.log("Families load family error", e);
           }
 
           const mCol = collection(db, "families", fid, "members");
-          unsubMembers = onSnapshot(mCol, (snap) => {
-            const arr: Member[] = [];
-            snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
-            setMembers(arr);
-          });
+          unsubMembers = onSnapshot(
+            mCol,
+            (snap) => {
+              const arr: Member[] = [];
+              snap.forEach((d) => arr.push({ id: d.id, ...(d.data() as any) }));
+              setMembers(arr);
+            },
+            (err) => {
+              console.log("Families members onSnapshot error", err);
+            }
+          );
         } else {
           setInviteCode(null);
           setFamilyOwnerUid(null);
@@ -112,7 +140,63 @@ export default function FamiliesScreen({ navigation }: any) {
     return () => {
       if (unsubMembers) unsubMembers();
     };
-  }, []);
+  }, [ctxUid, isDemo]);
+
+  // -----------------------------------------------------
+  // COMMON BUTTON RENDERER (для единого стиля вместо системного Button)
+  // -----------------------------------------------------
+  function renderPrimaryButton(
+    title: string,
+    onPress: () => void,
+    opts?: { disabled?: boolean; compact?: boolean }
+  ) {
+    const disabled = opts?.disabled;
+    const compact = opts?.compact;
+
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.85}
+        style={{
+          paddingVertical: compact ? 8 : 10,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          backgroundColor: disabled ? G.colors.buttonDisabled : G.colors.accent,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: disabled ? G.colors.textMuted : "#0b0f17",
+            fontWeight: "600",
+            fontSize: 14,
+          }}
+        >
+          {title}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  const isOwner =
+    uid != null && familyOwnerUid != null && uid === familyOwnerUid;
+
+  function renderOnlineStatus(m: Member) {
+    if (!m.lastSeen) return "—";
+
+    const now = Date.now();
+    const diff = now - m.lastSeen;
+    const online = diff < 2 * 60 * 1000; // < 2 минут
+
+    if (online) return "online";
+
+    const d = new Date(m.lastSeen);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `last seen ${hh}:${mm}`;
+  }
 
   // -----------------------------------------------------
   // CREATE FAMILY
@@ -121,6 +205,14 @@ export default function FamiliesScreen({ navigation }: any) {
     try {
       if (!uid) {
         Alert.alert("Error", "No user");
+        return;
+      }
+
+      if (isDemo) {
+        Alert.alert(
+          "Demo",
+          "In demo mode family creation is disabled. Use the prepared demo family."
+        );
         return;
       }
 
@@ -175,6 +267,14 @@ export default function FamiliesScreen({ navigation }: any) {
     try {
       if (!uid) {
         Alert.alert("Error", "No user");
+        return;
+      }
+
+      if (isDemo) {
+        Alert.alert(
+          "Demo",
+          "Joining families is disabled in demo mode. Demo user is already in a sample family."
+        );
         return;
       }
 
@@ -243,6 +343,14 @@ export default function FamiliesScreen({ navigation }: any) {
         return;
       }
 
+      if (isDemo) {
+        Alert.alert(
+          "Demo",
+          "In demo mode ownership changes are disabled."
+        );
+        return;
+      }
+
       await setDoc(
         doc(db, "families", myFamilyId),
         { ownerUid: uid },
@@ -266,6 +374,15 @@ export default function FamiliesScreen({ navigation }: any) {
         Alert.alert("Error", "No family");
         return;
       }
+
+      if (isDemo) {
+        Alert.alert(
+          "Demo",
+          "Age approvals are disabled in demo mode. This flow is handled only in real families."
+        );
+        return;
+      }
+
       if (!hasBirthDate) {
         Alert.alert(
           "No birth date",
@@ -298,14 +415,11 @@ export default function FamiliesScreen({ navigation }: any) {
     }
   }
 
-  const isOwner =
-    uid != null && familyOwnerUid != null && uid === familyOwnerUid;
-
   // -----------------------------------------------------
   // RENDER
   // -----------------------------------------------------
   return (
-    <View style={{ flex: 1, backgroundColor: "#020617" }}>
+    <View style={{ flex: 1, backgroundColor: G.colors.bg }}>
       <ScrollView
         contentContainerStyle={{
           padding: 16,
@@ -317,30 +431,61 @@ export default function FamiliesScreen({ navigation }: any) {
           style={{
             fontWeight: "700",
             fontSize: 20,
-            color: "#ffffff",
+            color: G.colors.text,
             marginBottom: 12,
           }}
         >
           Families
         </Text>
 
+        {isDemo && (
+          <View
+            style={{
+              borderRadius: 10,
+              padding: 10,
+              backgroundColor: G.colors.cardSoft,
+              marginBottom: 12,
+              borderWidth: 1,
+              borderColor: G.colors.demoBorder,
+            }}
+          >
+            <Text
+              style={{
+                color: G.colors.demoAccent,
+                fontWeight: "600",
+                marginBottom: 4,
+              }}
+            >
+              Demo mode
+            </Text>
+            <Text style={{ color: G.colors.textMuted, fontSize: 13 }}>
+              This screen shows a sample family. Creating or joining families is
+              disabled in demo — use the existing demo family setup.
+            </Text>
+          </View>
+        )}
+
         {/* ===================== MAIN FAMILY CARD ===================== */}
         <View
           style={{
             borderRadius: 12,
             padding: 12,
-            backgroundColor: "#111827",
+            backgroundColor: G.colors.card,
             marginBottom: 12,
+            borderWidth: 1,
+            borderColor: G.colors.border,
           }}
         >
-          <Text style={{ color: "#9CA3AF", marginBottom: 4 }}>My family</Text>
-          <Text style={{ color: "#F9FAFB" }}>
+          <Text style={{ color: G.colors.textMuted, marginBottom: 4 }}>
+            My family
+          </Text>
+          <Text style={{ color: G.colors.text }}>
             Family ID: {myFamilyId ?? "—"}
           </Text>
-          <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
+          <Text style={{ color: G.colors.text, marginTop: 2 }}>
             Invite code: {inviteCode ?? "—"}
           </Text>
-          <Text style={{ color: "#F9FAFB", marginTop: 2 }}>
+          <Text style={{ color: G.colors.text, marginTop: 2 }}>
             Family owner:{" "}
             {familyOwnerUid
               ? familyOwnerUid === uid
@@ -356,7 +501,7 @@ export default function FamiliesScreen({ navigation }: any) {
           >
             <Text
               style={{
-                color: inviteCode ? "#60A5FA" : "#4B5563",
+                color: inviteCode ? G.colors.accent : G.colors.textMuted,
                 fontWeight: "600",
               }}
             >
@@ -364,9 +509,9 @@ export default function FamiliesScreen({ navigation }: any) {
             </Text>
           </TouchableOpacity>
 
-          {!isOwner && myFamilyId && uid && (
-            <View style={{ marginTop: 8 }}>
-              <Button title="Make me Family Owner" onPress={handleBecomeOwner} />
+          {!isOwner && myFamilyId && uid && !isDemo && (
+            <View style={{ marginTop: 8, maxWidth: 220 }}>
+              {renderPrimaryButton("Make me Family Owner", handleBecomeOwner)}
             </View>
           )}
 
@@ -379,26 +524,42 @@ export default function FamiliesScreen({ navigation }: any) {
               gap: 8,
             }}
           >
-            <Button
-              title="Open Family Treasury"
-              onPress={() => navigation.navigate("FamilyTreasury")}
-              disabled={!myFamilyId}
-            />
-            <Button
-              title="Family Chats"
-              onPress={() => navigation.navigate("FamilyChatList")}
-              disabled={!myFamilyId}
-            />
-            <Button
-              title="Children & locked"
-              onPress={() => navigation.navigate("FamilyChildren")}
-              disabled={!myFamilyId}
-            />
-            <Button
-              title="Family Tasks"
-              onPress={() => navigation.navigate("FamilyTasks")}
-              disabled={!myFamilyId}
-            />
+            <View style={{ flex: 1, minWidth: "48%" }}>
+              {renderPrimaryButton(
+                "Family Map",
+                () => navigation.navigate("FamilyMap"),
+                { disabled: !myFamilyId }
+              )}
+            </View>
+
+            <View style={{ flex: 1, minWidth: "48%" }}>
+              {renderPrimaryButton(
+                "Open Family Treasury",
+                () => navigation.navigate("FamilyTreasury"),
+                { disabled: !myFamilyId }
+              )}
+            </View>
+            <View style={{ flex: 1, minWidth: "48%" }}>
+              {renderPrimaryButton(
+                "Family Chats",
+                () => navigation.navigate("FamilyChatList"),
+                { disabled: !myFamilyId }
+              )}
+            </View>
+            <View style={{ flex: 1, minWidth: "48%" }}>
+              {renderPrimaryButton(
+                "Children & locked",
+                () => navigation.navigate("FamilyChildren"),
+                { disabled: !myFamilyId }
+              )}
+            </View>
+            <View style={{ flex: 1, minWidth: "48%" }}>
+              {renderPrimaryButton(
+                "Family Tasks",
+                () => navigation.navigate("FamilyTasks"),
+                { disabled: !myFamilyId }
+              )}
+            </View>
           </View>
         </View>
 
@@ -407,36 +568,38 @@ export default function FamiliesScreen({ navigation }: any) {
           style={{
             borderRadius: 12,
             padding: 12,
-            backgroundColor: "#111827",
+            backgroundColor: G.colors.card,
             marginBottom: 12,
+            borderWidth: 1,
+            borderColor: G.colors.border,
           }}
         >
-          <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
+          <Text style={{ color: G.colors.text, fontWeight: "600" }}>
             Create new family
           </Text>
 
           <TextInput
             placeholder="Family name"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={G.colors.textMuted}
             value={name}
             onChangeText={setName}
+            editable={!isDemo}
             style={{
               marginTop: 8,
               borderWidth: 1,
-              borderColor: "#374151",
+              borderColor: G.colors.border,
               borderRadius: 8,
               paddingHorizontal: 10,
               paddingVertical: 8,
-              color: "#F9FAFB",
+              color: G.colors.text,
+              backgroundColor: G.colors.inputBg,
             }}
           />
 
-          <View style={{ marginTop: 8 }}>
-            <Button
-              title="Create"
-              onPress={handleCreateFamily}
-              disabled={!name.trim() || loading}
-            />
+          <View style={{ marginTop: 8, maxWidth: 160 }}>
+            {renderPrimaryButton("Create", handleCreateFamily, {
+              disabled: !name.trim() || loading || isDemo,
+            })}
           </View>
         </View>
 
@@ -445,37 +608,39 @@ export default function FamiliesScreen({ navigation }: any) {
           style={{
             borderRadius: 12,
             padding: 12,
-            backgroundColor: "#111827",
+            backgroundColor: G.colors.card,
             marginBottom: 12,
+            borderWidth: 1,
+            borderColor: G.colors.border,
           }}
         >
-          <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>
+          <Text style={{ color: G.colors.text, fontWeight: "600" }}>
             Join by invite code
           </Text>
 
           <TextInput
             placeholder="CODE"
             autoCapitalize="characters"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={G.colors.textMuted}
             value={code}
             onChangeText={setCode}
+            editable={!isDemo}
             style={{
               marginTop: 8,
               borderWidth: 1,
-              borderColor: "#374151",
+              borderColor: G.colors.border,
               borderRadius: 8,
               paddingHorizontal: 10,
               paddingVertical: 8,
-              color: "#F9FAFB",
+              color: G.colors.text,
+              backgroundColor: G.colors.inputBg,
             }}
           />
 
-          <View style={{ marginTop: 8 }}>
-            <Button
-              title="Join"
-              onPress={handleJoinFamily}
-              disabled={!code.trim() || loading}
-            />
+          <View style={{ marginTop: 8, maxWidth: 140 }}>
+            {renderPrimaryButton("Join", handleJoinFamily, {
+              disabled: !code.trim() || loading || isDemo,
+            })}
           </View>
         </View>
 
@@ -484,17 +649,23 @@ export default function FamiliesScreen({ navigation }: any) {
           style={{
             borderRadius: 12,
             padding: 12,
-            backgroundColor: "#111827",
+            backgroundColor: G.colors.card,
+            borderWidth: 1,
+            borderColor: G.colors.border,
           }}
         >
           <Text
-            style={{ color: "#E5E7EB", fontWeight: "600", marginBottom: 8 }}
+            style={{
+              color: G.colors.text,
+              fontWeight: "600",
+              marginBottom: 8,
+            }}
           >
             Members
           </Text>
 
           {loading ? (
-            <Text style={{ color: "#6B7280" }}>Loading…</Text>
+            <Text style={{ color: G.colors.textMuted }}>Loading…</Text>
           ) : (
             <FlatList
               data={members}
@@ -530,38 +701,56 @@ export default function FamiliesScreen({ navigation }: any) {
                   isOwner &&
                   !!myFamilyId &&
                   !!item.birthDate &&
-                  !item.approvedByOwner;
+                  !item.approvedByOwner &&
+                  !isDemo;
+
+                const status = renderOnlineStatus(item);
 
                 return (
                   <View style={{ marginVertical: 4 }}>
-                    <Text style={{ color: "#D1D5DB" }}>
+                    <Text style={{ color: G.colors.text }}>
                       • {item.id.slice(0, 6)}…{" "}
                       {item.role ? `(${item.role})` : ""}
                     </Text>
 
-                    <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                    <Text
+                      style={{ color: G.colors.textMuted, fontSize: 12 }}
+                    >
                       DOB: {birth} • Age: {age} • {adult}
                     </Text>
 
-                    <Text style={{ color: "#6B7280", fontSize: 12 }}>
+                    <Text
+                      style={{ color: G.colors.textMuted, fontSize: 12 }}
+                    >
                       Wallet: {walletState} • Status: {approved}
+                    </Text>
+
+                    <Text
+                      style={{
+                        color:
+                          status === "online"
+                            ? G.colors.accent
+                            : G.colors.textMuted,
+                        fontSize: 12,
+                      }}
+                    >
+                      {status}
                     </Text>
 
                     {canApprove && (
                       <View style={{ marginTop: 4, maxWidth: 200 }}>
-                        <Button
-                          title="Approve age"
-                          onPress={() =>
-                            handleApproveAge(item.id, !!item.birthDate)
-                          }
-                        />
+                        {renderPrimaryButton("Approve age", () =>
+                          handleApproveAge(item.id, !!item.birthDate)
+                        )}
                       </View>
                     )}
                   </View>
                 );
               }}
               ListEmptyComponent={
-                <Text style={{ color: "#6B7280" }}>No members yet</Text>
+                <Text style={{ color: G.colors.textMuted }}>
+                  No members yet
+                </Text>
               }
             />
           )}

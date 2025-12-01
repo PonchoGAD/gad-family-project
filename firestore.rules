@@ -6,6 +6,22 @@ service cloud.firestore {
     /* ======================
        HELPERS
     ====================== */
+
+    // Авторизован ли пользователь
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Специальный демо-пользователь (используется DemoContext)
+    function isDemoUser(uid) {
+      return uid == "demo-uid";
+    }
+
+    // Специальная демо-семья (используется DemoContext)
+    function isDemoFamily(fid) {
+      return fid == "demo-family";
+    }
+
     function userFamilyId(uid) {
       return get(/databases/$(database)/documents/users/$(uid)).data.familyId;
     }
@@ -18,6 +34,23 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/families/$(fid)/members/$(requesterUid)).data.isAdult == true;
     }
 
+    // Роль участника в семье (parent / child / owner и т.д.)
+    function familyMemberRole(fid, uid) {
+      return get(/databases/$(database)/documents/families/$(fid)/members/$(uid)).data.role;
+    }
+
+    // Является ли текущий пользователь членом семьи fid
+    function isFamilyMember(fid) {
+      return isAuthed() && userFamilyId(request.auth.uid) == fid;
+    }
+
+    // Владелец семьи или родитель (по роли в members)
+    function isFamilyOwnerOrParent(fid) {
+      return isOwnerOfFamily(request.auth.uid, fid)
+        || familyMemberRole(fid, request.auth.uid) in ['parent', 'owner'];
+    }
+
+    // Может ли requester видеть subject-а внутри семьи (старый хелпер, нужен для части правил)
     function canSeeSubjectInFamily(requesterUid, subjectUid) {
       let fid = userFamilyId(subjectUid);
       return requesterUid == subjectUid
@@ -25,114 +58,171 @@ service cloud.firestore {
         || isAdultInFamily(requesterUid, fid);
     }
 
+    // Член одной семьи с владельцем гео-документа (для /locations/{uid}/...)
+    function isFamilyMemberOf(uid) {
+      // В rules нельзя использовать if/return как в JS, поэтому всё через выражение
+      let requesterFid = userFamilyId(request.auth.uid);
+      let subjectFid   = userFamilyId(uid);
+
+      return isAuthed() && (
+        // Основное правило — одна семья
+        requesterFid == subjectFid ||
+        // Разрешаем демо-сценарии (инвесторский demo-family / demo-uid)
+        isDemoUser(uid) ||
+        isDemoFamily(requesterFid) ||
+        isDemoFamily(subjectFid)
+      );
+    }
+
+    // --- Chat helpers (global chats/{chatId}) ---
+    function isGlobalChatMember(chatId) {
+      return isAuthed() &&
+        request.auth.uid in
+          get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+    }
+
     /* ======================
        USERS
     ====================== */
     match /users/{uid} {
-      // Базовое правило: владелец может читать/писать свой документ
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      // Базовое правило:
+      //  - владелец может читать/писать свой документ
+      //  - демо-пользователь доступен только на чтение всем авторизованным
+      allow read: if isAuthed() && (
+        request.auth.uid == uid ||
+        isDemoUser(uid)
+      );
+
+      allow write: if isAuthed() && request.auth.uid == uid;
 
       match /assistant/{docId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        // Локальные настройки ассистента (персональные)
+        allow read, write: if isAuthed() && request.auth.uid == uid;
       }
+
       match /todos/{tid} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if isAuthed() && request.auth.uid == uid;
       }
+
       match /calendar/{eid} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if isAuthed() && request.auth.uid == uid;
       }
 
       match /nftOwnerships/{id} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
+
       match /swapOrders/{id} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
+
       match /lpOrders/{id} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
+
       match /stakingPositions/{id} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
+
       match /portfolioLedger/{id} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
 
       // Бейджи: видны только пользователю, но создаются/обновляются только через backend (Cloud Functions)
       match /badges/{badgeId} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
     }
 
     /* ======================
        PRIVATE ASSISTANT MESSAGES
+       (AI-ассистент, привязанный к реальному uid)
     ====================== */
     match /messages_private/{uid}/assistant/{mid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isAuthed() && request.auth.uid == uid;
     }
 
     /* ======================
        FAMILIES ROOT
     ====================== */
     match /families/{fid} {
-      // Семейный документ может читать любой авторизованный (для FindFriends и т.д.)
-      allow read: if request.auth != null;
+      // Семейный документ может читать любой авторизованный (для FindFriends и т.п.)
+      allow read: if isAuthed();
       allow write: if false;
 
       match /members/{uid} {
-        allow read: if request.auth != null && (
+        // Члены семьи:
+        //  - сам пользователь
+        //  - владелец семьи
+        //  - взрослый в семье
+        //  - либо любой пользователь, если это демо-семья
+        allow read: if isAuthed() && (
           request.auth.uid == uid ||
           isOwnerOfFamily(request.auth.uid, fid) ||
-          isAdultInFamily(request.auth.uid, fid)
+          isAdultInFamily(request.auth.uid, fid) ||
+          isDemoFamily(fid)
         );
         allow write: if false;
       }
 
       match /approvals/{aid} {
-        allow read: if request.auth != null;
+        allow read: if isAuthed();
         allow write: if false;
       }
 
+      // СТАРЫЕ places (v0)
       match /places/{pid} {
-        allow read: if request.auth != null;
+        allow read: if isAuthed();
         allow write: if false;
+      }
+
+      // НОВЫЕ safe-зоны (V1): families/{fid}/zones/{zoneId}
+      match /zones/{zoneId} {
+        // Читать могут только члены семьи (и демо-сценарий)
+        allow read: if isAuthed() && (
+          isFamilyMember(fid) ||
+          isDemoFamily(fid)
+        );
+
+        // Писать могут владелец семьи или родитель (role ∈ ['parent','owner'])
+        allow write: if isAuthed() && isFamilyOwnerOrParent(fid);
       }
 
       match /geoEvents/{eid} {
-        allow read: if request.auth != null;
+        allow read: if isAuthed();
         allow write: if false;
       }
 
       match /geoState/{uid} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && request.auth.uid == uid;
         allow write: if false;
       }
 
       match /elections/{eid} {
-        allow read: if request.auth != null;
+        allow read: if isAuthed();
         allow write: if false;
 
         match /votes/{voterUid} {
-          allow read: if request.auth != null;
+          allow read: if isAuthed();
           allow write: if false;
         }
       }
 
       /* ----- FAMILY VAULT & LEDGER (СТАРЫЕ ПРАВИЛА) ----- */
       match /vault {
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
       }
 
       match /vaultMembers/{uid} {
-        allow read: if request.auth != null && (
+        allow read: if isAuthed() && (
           request.auth.uid == uid ||
           isOwnerOfFamily(request.auth.uid, fid) ||
           isAdultInFamily(request.auth.uid, fid)
@@ -141,19 +231,19 @@ service cloud.firestore {
       }
 
       match /vaultIncomes/{iid} {
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
       }
 
       match /vaultDistributions/{did} {
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
       }
 
       match /ledger/{entryId} {
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
       }
@@ -161,13 +251,13 @@ service cloud.firestore {
       /* ----- FAMILY VAULT (НОВАЯ СТРУКТУРА: vault/main + locked) ----- */
       // families/{fid}/vault/main
       match /vault/{docId} {
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           (isOwnerOfFamily(request.auth.uid, fid) || isAdultInFamily(request.auth.uid, fid));
         allow write: if false;
 
         // families/{fid}/vault/main/locked/{uid}
         match /locked/{uid} {
-          allow read: if request.auth != null && (
+          allow read: if isAuthed() && (
             request.auth.uid == uid ||
             isOwnerOfFamily(request.auth.uid, fid) ||
             isAdultInFamily(request.auth.uid, fid)
@@ -176,18 +266,27 @@ service cloud.firestore {
         }
       }
 
+      /* ----- FAMILY TREASURY LEDGER (НОВАЯ СТРУКТУРА: treasury/ledger) ----- */
+      // families/{fid}/treasury/ledger/{entryId}
+      match /treasury/ledger/{entryId} {
+        // читать могут только члены семьи
+        allow read: if isAuthed() && isFamilyMember(fid);
+        // писать только backend через admin SDK
+        allow write: if false;
+      }
+
       /* ----- FAMILY CHATS (multi-family) ----- */
       match /chats/{chatId} {
         // читать / писать чат может только пользователь, у которого familyId == fid
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
-        allow write: if request.auth != null &&
+        allow write: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
 
         match /messages/{mid} {
-          allow read: if request.auth != null &&
+          allow read: if isAuthed() &&
             userFamilyId(request.auth.uid) == fid;
-          allow write: if request.auth != null &&
+          allow write: if isAuthed() &&
             userFamilyId(request.auth.uid) == fid;
         }
       }
@@ -195,97 +294,211 @@ service cloud.firestore {
       /* ----- FAMILY TODO LIST (tasks) ----- */
       match /tasks/{tid} {
         // задачи семьи доступны всем членам семьи
-        allow read: if request.auth != null &&
+        allow read: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
-        allow write: if request.auth != null &&
+        allow write: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
       }
 
-      /* ----- FAMILY GOALS ----- */
+      /* ----- FAMILY GOALS (используется демо) ----- */
       match /goals/{goalId} {
-        // цели семьи доступны всем членам семьи
-        allow read: if request.auth != null &&
-          userFamilyId(request.auth.uid) == fid;
-        allow write: if request.auth != null &&
-          userFamilyId(request.auth.uid) == fid;
+        // цели семьи:
+        //  - доступны всем членам семьи
+        //  - а также любому пользователю, если это демо-семья
+        allow read: if isAuthed() && (
+          userFamilyId(request.auth.uid) == fid ||
+          isDemoFamily(fid)
+        );
+        allow write: if isAuthed() && (
+          userFamilyId(request.auth.uid) == fid ||
+          isDemoFamily(fid)
+        );
       }
 
       /* ----- FRIEND REQUESTS ----- */
       match /friendRequests/{reqId} {
         // читать могут все авторизованные (для публичного слоя дружб / отладки)
-        allow read: if request.auth != null;
+        allow read: if isAuthed();
         // писать может только семья, соответствующая fid
-        allow write: if request.auth != null &&
+        allow write: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
       }
 
       /* ----- FRIENDS LIST ----- */
       match /friends/{otherFamilyId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null &&
+        allow read: if isAuthed();
+        allow write: if isAuthed() &&
           userFamilyId(request.auth.uid) == fid;
       }
     }
 
     /* ======================
-       LOCATIONS
+       LOCATIONS (V1 гео-структура)
+       locations/{uid}/current/state
+       locations/{uid}/history/{date}/points/{pointId}
     ====================== */
-    match /locations/{kind} {
-      allow read: if request.auth != null;
-      allow write: if false;
+    match /locations/{uid} {
 
-      match /{uid}/{docId} {
-        allow read: if request.auth != null && canSeeSubjectInFamily(request.auth.uid, uid);
-        allow write: if false;
+      // Текущая локация: locations/{uid}/current/state
+      match /current/{docId} {
+        // Чтение:
+        //  - любой член семьи того же familyId (через isFamilyMemberOf)
+        allow read: if isFamilyMemberOf(uid);
+
+        // Запись:
+        //  - только сам пользователь (его клиентский код / locationLoop)
+        allow write: if isAuthed() && request.auth.uid == uid;
+      }
+
+      // История: locations/{uid}/history/{date}/points/{pointId}
+      match /history/{date}/points/{pointId} {
+        // Чтение — те же члены семьи
+        allow read: if isFamilyMemberOf(uid);
+
+        // Пишет только сам пользователь (foreground-цикл или Cloud Function от его имени)
+        allow write: if isAuthed() && request.auth.uid == uid;
       }
     }
 
     /* ======================
        TOP LEVEL
     ====================== */
-    match /earnings/{uid}/{date} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+    /* ----- GLOBAL CHATS (family + dm + group + assistant + interfamily) ----- */
+    match /chats/{chatId} {
+      // Создание чата:
+      //  - пользователь должен быть в memberIds
+      //  - для DM familyId должен совпадать с familyId создателя (детям и взрослым нельзя "подделать" чужую семью)
+      allow create: if isAuthed()
+        && request.resource.data.memberIds != null
+        && request.auth.uid in request.resource.data.memberIds
+        && (
+          request.resource.data.type != "dm"
+          || request.resource.data.familyId == userFamilyId(request.auth.uid)
+        );
+
+      // Чтение: только участники чата
+      allow read: if isAuthed()
+        && resource.data.memberIds != null
+        && request.auth.uid in resource.data.memberIds;
+
+      // Обновление/удаление: только участники чата
+      allow update, delete: if isAuthed()
+        && resource.data.memberIds != null
+        && request.auth.uid in resource.data.memberIds;
+
+      // Сообщения внутри чата
+      match /messages/{mid} {
+        // читать/писать сообщения могут только участники родительского чата
+        allow read, create, update, delete: if isGlobalChatMember(chatId);
+      }
     }
 
-    // ❗ FIX: новая структура шагов: dailySteps/{uid}/days/{date}
+    /* ----- USER CHAT META (per-user chat state) ----- */
+    // userChatMeta/{uid}/chats/{chatId}
+    match /userChatMeta/{uid}/chats/{chatId} {
+      // Только владелец uid может читать/писать свою мету по чатам
+      allow read, write: if isAuthed() && request.auth.uid == uid;
+    }
+
+    /* ----- CALL SESSIONS (audio/video signaling для WebRTC) ----- */
+    // callSessions/{callId}
+    match /callSessions/{callId} {
+      // Создание сессии: только участник (caller или один из calleeIds)
+      allow create: if isAuthed()
+        && (
+          request.auth.uid == request.resource.data.callerId
+          || (
+            request.resource.data.calleeIds != null
+            && request.auth.uid in request.resource.data.calleeIds
+          )
+        );
+
+      // Чтение / обновление / удаление: только участники
+      allow read, update, delete: if isAuthed()
+        && (
+          request.auth.uid == resource.data.callerId
+          || (
+            resource.data.calleeIds != null
+            && request.auth.uid in resource.data.calleeIds
+          )
+        );
+    }
+
+    // earnings/{uid}/{date}
+    match /earnings/{uid}/{date} {
+      allow read, write: if isAuthed() && request.auth.uid == uid;
+    }
+
+    // Новая структура шагов: dailySteps/{uid}/days/{date}
+    //  - владелец
+    //  - либо любой пользователь, если это демо-uid
     match /dailySteps/{uid}/days/{date} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isAuthed() && (
+        request.auth.uid == uid ||
+        isDemoUser(uid)
+      );
     }
 
     match /redemptions/{uid}/{rid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isAuthed() && request.auth.uid == uid;
     }
 
     match /suggestions/{fid}/{docId} {
-      allow read: if request.auth != null;
+      allow read: if isAuthed();
       allow write: if false;
     }
 
     match /funds/{fundId} {
-      allow read: if request.auth != null;
+      allow read: if isAuthed();
       allow write: if false;
     }
 
     /* ----- REFERRALS (для ReferralScreen) ----- */
     match /referrals/{uid}/items/{itemId} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAuthed() && request.auth.uid == uid;
       allow write: if false;
+    }
+
+    /* ----- BALANCES (для GAD Points и демо) ----- */
+    match /balances/{uid} {
+      // баланс GAD Points:
+      //  - владелец
+      //  - либо любой пользователь, если это демо-uid
+      allow read, write: if isAuthed() && (
+        request.auth.uid == uid ||
+        isDemoUser(uid)
+      );
     }
 
     /* ----- REWARDS (для step-engine и RewardsScreen) ----- */
     // rewards/{uid} + rewards/{uid}/days/{date}
     match /rewards/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isAuthed() && (
+        request.auth.uid == uid ||
+        isDemoUser(uid)
+      );
 
       match /days/{date} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if isAuthed() && (
+          request.auth.uid == uid ||
+          isDemoUser(uid)
+        );
       }
     }
 
     /* ----- GAS STIPEND (для GasHistoryScreen и applyGasStipend) ----- */
     match /gasStipend/{uid}/items/{itemId} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAuthed() && request.auth.uid == uid;
       allow write: if false; // пополняем только через Cloud Functions
+    }
+
+    /* ----- DAILY STATS (Step Engine V2 aggregated stats) ----- */
+    match /dailyStats/{date} {
+      // можно смотреть только будучи авторизованным
+      allow read: if isAuthed();
+      // пишет только backend (admin SDK)
+      allow write: if false;
     }
   }
 }

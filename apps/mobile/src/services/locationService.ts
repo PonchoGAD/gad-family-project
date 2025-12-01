@@ -1,6 +1,12 @@
+// ---------------------------------------------------------------
 // apps/mobile/src/services/locationService.ts
+// Location permissions + periodic pings for family geo + lastSeen
+// ---------------------------------------------------------------
+
 import * as Location from "expo-location";
 import { fn } from "../lib/functionsClient";
+import { auth, db } from "../firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 /**
  * Request foreground + background location permissions.
@@ -22,13 +28,17 @@ let _timer: any = null;
 
 /**
  * Start periodic location pings to the backend.
- * Uses callable function "geo_ping" (matches Cloud Functions export).
+ * Uses callable function "geo_ping" (Cloud Functions export).
+ * Also updates users/{uid}.lastSeenAt + lastLocation.
  */
 export function startPinging(intervalMs = 120_000) {
   stopPinging();
 
-  _timer = setInterval(async () => {
+  async function sendPing() {
     try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
@@ -36,15 +46,38 @@ export function startPinging(intervalMs = 120_000) {
       const { latitude: lat, longitude: lng, accuracy } = pos.coords;
       const acc = accuracy ?? null;
 
-      // Callable name must match backend export: geo_ping
-      const call = fn<{ lat: number; lng: number; acc: number | null }, { ok: boolean }>(
-        "geo_ping"
-      );
+      // Callable geo_ping
+      const call = fn<
+        { lat: number; lng: number; acc: number | null },
+        { ok: boolean }
+      >("geo_ping");
 
       await call({ lat, lng, acc });
+
+      // Update user lastSeen + lastLocation (MVP)
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          lastSeenAt: serverTimestamp(),
+          lastLocation: {
+            lat,
+            lng,
+            acc,
+          },
+        },
+        { merge: true }
+      );
     } catch (e) {
       console.log("geo_ping error", e);
     }
+  }
+
+  // First ping immediately
+  sendPing();
+
+  // Then interval
+  _timer = setInterval(() => {
+    sendPing();
   }, intervalMs);
 }
 

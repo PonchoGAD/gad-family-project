@@ -15,6 +15,7 @@ import {
   orderBy,
   addDoc,
   updateDoc,
+  type DocumentData,
 } from "firebase/firestore";
 import * as Linking from "expo-linking";
 import { Share } from "react-native";
@@ -22,13 +23,26 @@ import {
   listenToFamilyTasksConverter,
   FamilyTask,
 } from "../types/tasks";
-import { distanceM } from "./geo";
+import {
+  distanceM,
+  type FamilyZone as GeoFamilyZone,
+} from "./geo";
+
+// --------------------------------------------------------------
+// Базовые типы семьи
+// --------------------------------------------------------------
 
 export type FamilyMember = {
-  id: string;
+  id: string; // uid участника
   joinedAt?: any;
   isAdult?: boolean;
   lastLocation?: { lat: number; lng: number };
+
+  // Новые поля для FamilyMap / UI (всё опционально, не ломает старый код)
+  displayName?: string;
+  age?: number;
+  role?: string; // parent / child / guardian / ...
+  avatarUrl?: string | null;
 };
 
 export type FamilyLocation = {
@@ -54,6 +68,14 @@ export type Family = {
   interests?: string[];
   findFriendsEnabled?: boolean;
 };
+
+// Safe zones: тип в этом модуле, но базируется на geo.ts,
+// чтобы не разъезжались определения.
+export type FamilyZone = GeoFamilyZone;
+
+// --------------------------------------------------------------
+// Создание / подключение семьи
+// --------------------------------------------------------------
 
 /**
  * Create a new family and attach current user as owner + member.
@@ -160,8 +182,12 @@ export function subscribeFamily(
   });
 }
 
+// --------------------------------------------------------------
+// Члены семьи (для FamilyMap, UI и т.п.)
+// --------------------------------------------------------------
+
 /**
- * Subscribe to family members
+ * Subscribe to family members (старое имя).
  */
 export function subscribeMembers(
   fid: string,
@@ -174,6 +200,64 @@ export function subscribeMembers(
     );
     cb(items);
   });
+}
+
+/**
+ * listenFamilyMembers — удобный алиас над subscribeMembers,
+ * чтобы в навигации было читаемо.
+ */
+export function listenFamilyMembers(
+  fid: string,
+  cb: (members: FamilyMember[]) => void
+) {
+  return subscribeMembers(fid, cb);
+}
+
+/**
+ * Одноразовая загрузка членов семьи с подтягиванием данных из users/{uid}.
+ * Нужна, чтобы в FamilyMapScreen иметь имена / возраст / роль.
+ */
+export async function getFamilyMembers(fid: string): Promise<FamilyMember[]> {
+  const coll = collection(db, "families", fid, "members");
+  const snap = await getDocs(coll);
+
+  const members: FamilyMember[] = [];
+
+  for (const d of snap.docs) {
+    const base = d.data() as any;
+    const uid = d.id;
+
+    let userData: any = null;
+    try {
+      const uSnap = await getDoc(doc(db, "users", uid));
+      if (uSnap.exists()) {
+        userData = uSnap.data();
+      }
+    } catch (e) {
+      console.log("[families] getFamilyMembers user load error", e);
+    }
+
+    members.push({
+      id: uid,
+      joinedAt: base.joinedAt,
+      isAdult: base.isAdult,
+      lastLocation: base.lastLocation,
+      displayName:
+        (userData?.displayName as string | undefined) ??
+        (userData?.name as string | undefined),
+      age:
+        typeof userData?.age === "number"
+          ? (userData.age as number)
+          : undefined,
+      role:
+        (base.role as string | undefined) ??
+        (userData?.role as string | undefined),
+      avatarUrl:
+        (userData?.avatarUrl as string | null | undefined) ?? null,
+    });
+  }
+
+  return members;
 }
 
 /**
@@ -204,9 +288,10 @@ export async function shareInviteLink(inviteCode: string) {
   return url;
 }
 
-/**
- * Family tasks
- */
+// --------------------------------------------------------------
+// Family tasks
+// --------------------------------------------------------------
+
 export function listenFamilyTasks(
   fid: string,
   cb: (items: any[]) => void
@@ -253,6 +338,10 @@ export async function toggleFamilyTask(
   );
 }
 
+// --------------------------------------------------------------
+// Family settings
+// --------------------------------------------------------------
+
 /**
  * Update family settings (FIRST VALID VERSION)
  */
@@ -272,6 +361,104 @@ export async function updateFamilySettings(
     { merge: true }
   );
 }
+
+// --------------------------------------------------------------
+// Safe Zones (families/{fid}/zones/*)
+// --------------------------------------------------------------
+
+/**
+ * Получить список safe-зон семьи.
+ */
+export async function getFamilyZones(
+  fid: string
+): Promise<FamilyZone[]> {
+  const collRef = collection(db, "families", fid, "zones");
+  const snap = await getDocs(collRef);
+
+  const zones: FamilyZone[] = snap.docs.map((d) => {
+    const v = d.data() as any;
+    return {
+      id: d.id,
+      name: v.name ?? "Zone",
+      lat: Number(v.lat ?? 0),
+      lng: Number(v.lng ?? 0),
+      radius: Number(v.radius ?? 150),
+      color: v.color as string | undefined,
+      active: v.active !== false, // по умолчанию true
+      createdAt: v.createdAt,
+    };
+  });
+
+  return zones;
+}
+
+/**
+ * Подписка на safe-зоны семьи.
+ */
+export function listenFamilyZones(
+  fid: string,
+  cb: (zones: FamilyZone[]) => void
+) {
+  const collRef = collection(db, "families", fid, "zones");
+  const qRef = query(collRef, orderBy("createdAt", "desc"));
+
+  return onSnapshot(qRef, (snap) => {
+    const zones: FamilyZone[] = snap.docs.map((d) => {
+      const v = d.data() as any;
+      return {
+        id: d.id,
+        name: v.name ?? "Zone",
+        lat: Number(v.lat ?? 0),
+        lng: Number(v.lng ?? 0),
+        radius: Number(v.radius ?? 150),
+        color: v.color as string | undefined,
+        active: v.active !== false,
+        createdAt: v.createdAt,
+      };
+    });
+    cb(zones);
+  });
+}
+
+/**
+ * Создать safe-зону для семьи.
+ */
+export async function createFamilyZone(
+  fid: string,
+  input: Omit<FamilyZone, "id" | "createdAt">
+): Promise<string> {
+  const collRef = collection(db, "families", fid, "zones");
+  const zoneRef = doc(collRef);
+
+  const payload: DocumentData = {
+    name: input.name,
+    lat: input.lat,
+    lng: input.lng,
+    radius: input.radius,
+    color: input.color ?? null,
+    active: input.active ?? true,
+    createdAt: serverTimestamp(),
+  };
+
+  await setDoc(zoneRef, payload);
+  return zoneRef.id;
+}
+
+/**
+ * Включить / выключить safe-зону.
+ */
+export async function toggleFamilyZoneActive(
+  fid: string,
+  zoneId: string,
+  active: boolean
+) {
+  const ref = doc(db, "families", fid, "zones", zoneId);
+  await updateDoc(ref, { active });
+}
+
+// --------------------------------------------------------------
+// Discoverable families (поиск друзей вокруг)
+// --------------------------------------------------------------
 
 export type DiscoverableFamily = Family & {
   distanceKm?: number;
@@ -513,7 +700,6 @@ export async function rejectFriendRequest(req: FriendRequest) {
 /* ------------------------------------------------------------------ */
 /* Multi-family chats                                                 */
 /* ------------------------------------------------------------------ */
-// ВНИЗ ФАЙЛА, перед export type FamilyChat / после joinFamilyByCode и getCurrentUserFamilyId
 
 /**
  * Ensure that current user has a family.

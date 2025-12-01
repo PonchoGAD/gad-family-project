@@ -1,4 +1,18 @@
-// functions/src/step-engine.ts
+// -----------------------------------------------------------------------------
+// LEGACY STEP ENGINE V1
+// -----------------------------------------------------------------------------
+// - used only for early dry-run / debug
+// - product UI uses StepEngine V2 (stepEngineCron + stepEngineRunV2)
+// - V1 читает dailySteps/{uid}/days/{date}, пишет rewards/{uid}/days/{date},
+//   агрегат в rewards/{uid} и старый семейный vault/ledger.
+// -----------------------------------------------------------------------------
+//
+// Важно:
+//  - не вызывать V1 из мобильного/веб-клиента через callable;
+//  - оставляем только HTTP (stepEngineRunNowHttp) и cron (stepEngineDaily)
+//    как сервисные ручки для отладки и миграций.
+// -----------------------------------------------------------------------------
+
 import { DateTime } from "luxon";
 import * as admin from "firebase-admin";
 import { DailyReward, UserProfile } from "./types.js";
@@ -20,6 +34,7 @@ function getRateForDay(d: any): number {
  *  - families/{fid}/vault/main   ← FIX: document, а не коллекция
  *
  * Сейчас вызывается ТОЛЬКО если dryRun = false.
+ * Используется только в LEGACY V1 движке.
  */
 async function writeFamilyLedgerAndVault(
   db: FirebaseFirestore.Firestore,
@@ -65,10 +80,16 @@ async function writeFamilyLedgerAndVault(
 }
 
 /**
- * Dry-run расчёт наград на дату (по всем пользователям)
+ * LEGACY STEP ENGINE V1 — dry-run расчёт наград на дату (по всем пользователям).
+ *
  * ВАЖНО:
  *  - шаги берём из dailySteps/{uid}/days/{date}
  *  - summary пишем в rewards/{uid} (2 сегмента, ок)
+ *  - используется только:
+ *      • stepEngineDaily (cron, legacy)
+ *      • stepEngineRunNowHttp (HTTP, legacy debug)
+ *
+ * Product UI (мобильное приложение) НЕ должно вызывать V1-нагрузки.
  */
 export async function runDailyDryRun(
   tz = process.env.APP_TIMEZONE || "America/New_York" // США, как договорились

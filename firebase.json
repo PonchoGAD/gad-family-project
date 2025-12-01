@@ -1,7 +1,8 @@
 {
   "functions": {
-    "source": "functions-app",
+    "source": "functions",
     "runtime": "nodejs20"
+
   },
   
   "firestore": {

@@ -9,9 +9,16 @@ import {
   ImageBackground,
   Animated,
 } from "react-native";
-import { auth, db } from "../firebase";
+import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { signInAnonymously } from "firebase/auth";
+import { useTheme } from "../wallet/ui/theme";
+import { useActiveUid, useIsDemo } from "../demo/DemoContext";
+
+// V2 Step Engine client
+import {
+  getTodayStepsPreview,
+  subscribeTodayReward,
+} from "../lib/stepEngine";
 
 const BG_IMAGE = require("../../assets/home-bg.png");
 
@@ -23,8 +30,10 @@ type HomeStats = {
   userName: string | null;
   familyName: string | null;
   todaySteps: number | null;
-  lastRewardGad: string | null;
-  lastRewardDate: string | null;
+  todayRewardGad: string | null; // gadEarned / gadPreview за сегодня
+  todayRewardStatus: string | null; // ok / limit / skipped / rejected / demo
+  lastRewardGad: string | null; // fallback: последний GAD из агрегата
+  lastRewardDate: string | null; // дата последнего расчёта
 };
 
 function formatDateLabel(d: Date): string {
@@ -36,10 +45,16 @@ function formatDateLabel(d: Date): string {
 }
 
 export default function HomeScreen({ navigation }: Props) {
+  const G = useTheme();
+  const { uid } = useActiveUid();
+  const isDemo = useIsDemo();
+
   const [stats, setStats] = useState<HomeStats>({
     userName: null,
     familyName: null,
     todaySteps: null,
+    todayRewardGad: null,
+    todayRewardStatus: null,
     lastRewardGad: null,
     lastRewardDate: null,
   });
@@ -84,14 +99,15 @@ export default function HomeScreen({ navigation }: Props) {
   }, [headerOpacity, headerTranslateY, buttonsOpacity, buttonsTranslateY]);
 
   useEffect(() => {
+    let unsubReward: (() => void) | null = null;
+
     (async () => {
       try {
-        let user = auth.currentUser;
-        if (!user) {
-          const res = await signInAnonymously(auth);
-          user = res.user;
+        if (!uid) {
+          // Нет активного uid (ни реального, ни демо) — просто показываем пустую витрину
+          setLoadingStats(false);
+          return;
         }
-        const uid = user.uid;
 
         // 1) users/{uid}
         const uSnap = await getDoc(doc(db, "users", uid));
@@ -100,53 +116,144 @@ export default function HomeScreen({ navigation }: Props) {
         const userName: string | null =
           (uData.displayName as string | undefined) ??
           (uData.name as string | undefined) ??
-          null;
+          (isDemo ? "Demo Investor" : null);
 
         const familyId: string | null =
           (uData.familyId as string | undefined) ?? null;
 
+        const role: string | null = (uData.role as string | undefined) ?? null;
+
+        // если нет роли или семьи → уводим в онбординг ТОЛЬКО в реальном режиме
+        if (!role || !familyId) {
+          if (!isDemo) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "AuthWelcome" as never }],
+            });
+          }
+          // В демо-режиме просто показываем пустую семью, без редиректа
+        }
+
         // 2) families/{fid}
         let familyName: string | null = null;
         if (familyId) {
-          const fSnap = await getDoc(doc(db, "families", familyId));
-          if (fSnap.exists()) {
-            const fData = fSnap.data() as any;
-            familyName =
-              (fData.name as string | undefined) ??
-              `Family ${familyId.slice(0, 4)}`;
+          try {
+            const fSnap = await getDoc(doc(db, "families", familyId));
+            if (fSnap.exists()) {
+              const fData = fSnap.data() as any;
+              familyName =
+                (fData.name as string | undefined) ??
+                `Family ${familyId.slice(0, 4)}`;
+            }
+          } catch (e) {
+            // в демо / при permissions ошибке просто оставляем familyName null
+            console.log("HomeScreen family load error", e);
           }
         }
 
-        // 3) dailySteps/{uid}/days/{today}
+        // Общий ключ для сегодняшней даты YYYY-MM-DD (нужен только для DEMO и fallback)
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, "0");
         const dd = String(today.getDate()).padStart(2, "0");
         const todayKey = `${yyyy}-${mm}-${dd}`;
 
+        // 3) todaySteps / todayReward через V2-хелперы
         let todaySteps: number | null = null;
-        const stepsSnap = await getDoc(
-          doc(db, "dailySteps", uid, "days", todayKey)
-        );
-        if (stepsSnap.exists()) {
-          const sData = stepsSnap.data() as any;
-          todaySteps = Number(sData.steps ?? 0);
+        let todayRewardGad: string | null = null;
+        let todayRewardStatus: string | null = null;
+
+        if (!isDemo) {
+          try {
+            const preview = await getTodayStepsPreview(uid);
+            todaySteps = Number.isFinite(preview.steps)
+              ? preview.steps
+              : 0;
+
+            const reward = preview.reward;
+            if (reward) {
+              // В типе StepEngineDayResult gadEarned/gadPreview — строки
+              todayRewardGad =
+                reward.gadEarned ?? reward.gadPreview ?? null;
+              todayRewardStatus = reward.status ?? null;
+            }
+
+            // Live-обновления reward за today
+            unsubReward = subscribeTodayReward(uid, (liveReward) => {
+              setStats((prev) => {
+                if (!liveReward) {
+                  return {
+                    ...prev,
+                    todayRewardGad: prev.todayRewardGad,
+                    todayRewardStatus: prev.todayRewardStatus,
+                  };
+                }
+                const liveGad =
+                  liveReward.gadEarned ??
+                  liveReward.gadPreview ??
+                  prev.todayRewardGad;
+                const liveStatus = liveReward.status ?? prev.todayRewardStatus;
+
+                return {
+                  ...prev,
+                  todayRewardGad: liveGad,
+                  todayRewardStatus: liveStatus,
+                };
+              });
+            });
+          } catch (e) {
+            console.log("HomeScreen today steps/reward load error", e);
+          }
         }
 
-        // 4) rewards/{uid} — агрегат
-        let lastRewardGad: string | null = null;
-        let lastRewardDate: string | null = null;
+        // 4) rewards/{uid} — агрегат (fallback для lastReward)
+        let lastRewardGad: string | null = todayRewardGad;
+        let lastRewardDate: string | null = todayRewardGad ? todayKey : null;
 
-        const rSnap = await getDoc(doc(db, "rewards", uid));
-        if (rSnap.exists()) {
-          const rData = rSnap.data() as any;
-          if (typeof rData.lastGadPreview === "string") {
-            lastRewardGad = rData.lastGadPreview;
-          } else if (typeof rData.lastGadPreview === "number") {
-            lastRewardGad = rData.lastGadPreview.toString();
+        try {
+          const rSnap = await getDoc(doc(db, "rewards", uid));
+          if (rSnap.exists()) {
+            const rData = rSnap.data() as any;
+
+            // старое поле совместимости lastGadPreview (если есть)
+            let aggGad: string | null = null;
+            if (typeof rData.lastGadPreview === "string") {
+              aggGad = rData.lastGadPreview;
+            } else if (typeof rData.lastGadPreview === "number") {
+              aggGad = rData.lastGadPreview.toString();
+            }
+
+            const aggDate =
+              typeof rData.lastDate === "string" ? rData.lastDate : null;
+
+            // если за сегодня ещё ничего нет — используем агрегат
+            if (!lastRewardGad && aggGad) {
+              lastRewardGad = aggGad;
+            }
+            if (!lastRewardDate && aggDate) {
+              lastRewardDate = aggDate;
+            }
           }
-          if (typeof rData.lastDate === "string") {
-            lastRewardDate = rData.lastDate;
+        } catch (e) {
+          console.log("HomeScreen rewards agg load error", e);
+        }
+
+        // 5) DEMO-режим: подставляем фейковые значения
+        if (isDemo) {
+          if (todaySteps == null) {
+            todaySteps = 8200;
+          }
+          if (!todayRewardGad) {
+            todayRewardGad = "65.5";
+          }
+          if (!lastRewardGad) {
+            lastRewardGad = todayRewardGad;
+          }
+          if (!lastRewardDate) {
+            lastRewardDate = todayKey;
+          }
+          if (!todayRewardStatus) {
+            todayRewardStatus = "demo";
           }
         }
 
@@ -154,6 +261,8 @@ export default function HomeScreen({ navigation }: Props) {
           userName,
           familyName,
           todaySteps,
+          todayRewardGad,
+          todayRewardStatus,
           lastRewardGad,
           lastRewardDate,
         });
@@ -163,9 +272,19 @@ export default function HomeScreen({ navigation }: Props) {
         setLoadingStats(false);
       }
     })();
-  }, []);
 
-  function renderButton(label: string, onPress: () => void, subLabel?: string) {
+    return () => {
+      if (unsubReward) {
+        unsubReward();
+      }
+    };
+  }, [navigation, uid, isDemo]);
+
+  function renderButton(
+    label: string,
+    onPress: () => void,
+    subLabel?: string
+  ) {
     return (
       <TouchableOpacity
         onPress={onPress}
@@ -173,16 +292,16 @@ export default function HomeScreen({ navigation }: Props) {
           paddingVertical: 14,
           paddingHorizontal: 18,
           borderRadius: 18,
-          backgroundColor: "rgba(15, 23, 42, 0.95)", // глубокий тёмный
+          backgroundColor: G.colors.card,
           marginBottom: 10,
           borderWidth: 1,
-          borderColor: "rgba(250, 204, 21, 0.6)", // золото amber-400
+          borderColor: G.colors.accentSoft,
         }}
         activeOpacity={0.85}
       >
         <Text
           style={{
-            color: "#f9fafb",
+            color: G.colors.text,
             fontWeight: "600",
             fontSize: 15,
           }}
@@ -192,7 +311,7 @@ export default function HomeScreen({ navigation }: Props) {
         {subLabel ? (
           <Text
             style={{
-              color: "#9ca3af",
+              color: G.colors.textMuted,
               fontSize: 12,
               marginTop: 2,
             }}
@@ -216,16 +335,22 @@ export default function HomeScreen({ navigation }: Props) {
 
   const todayLabel = formatDateLabel(new Date());
 
+  // Приоритет отображения GAD:
+  // 1) todayRewardGad (сегодняшний результат движка)
+  // 2) lastRewardGad (агрегат / последняя дата)
+  const gadLabel =
+    stats.todayRewardGad != null
+      ? `${stats.todayRewardGad} GAD`
+      : stats.lastRewardGad != null
+      ? `${stats.lastRewardGad} GAD`
+      : "—";
+
   return (
-    <ImageBackground
-      source={BG_IMAGE}
-      style={{ flex: 1 }}
-      resizeMode="cover"
-    >
+    <ImageBackground source={BG_IMAGE} style={{ flex: 1 }} resizeMode="cover">
       <View
         style={{
           flex: 1,
-          backgroundColor: "rgba(2, 6, 23, 0.88)", // плотнее затемнение
+          backgroundColor: G.colors.bgOverlay, // overlay поверх фоновой картинки
         }}
       >
         <ScrollView
@@ -258,9 +383,9 @@ export default function HomeScreen({ navigation }: Props) {
                   width: 48,
                   height: 48,
                   borderRadius: 999,
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
+                  backgroundColor: G.colors.card,
                   borderWidth: 1,
-                  borderColor: "rgba(250, 204, 21, 0.8)", // золотой акцент
+                  borderColor: G.colors.accent,
                   alignItems: "center",
                   justifyContent: "center",
                   marginRight: 12,
@@ -268,7 +393,7 @@ export default function HomeScreen({ navigation }: Props) {
               >
                 <Text
                   style={{
-                    color: "#facc15",
+                    color: G.colors.accent,
                     fontWeight: "700",
                     fontSize: 18,
                   }}
@@ -283,14 +408,14 @@ export default function HomeScreen({ navigation }: Props) {
                   style={{
                     fontSize: 18,
                     fontWeight: "700",
-                    color: "#f9fafb",
+                    color: G.colors.text,
                   }}
                 >
                   {stats.userName || "GAD Family Member"}
                 </Text>
                 <Text
                   style={{
-                    color: "#cbd5f5",
+                    color: G.colors.textMuted,
                     marginTop: 2,
                     fontSize: 13,
                   }}
@@ -307,14 +432,14 @@ export default function HomeScreen({ navigation }: Props) {
               style={{
                 borderRadius: 16,
                 padding: 14,
-                backgroundColor: "rgba(15, 23, 42, 0.92)",
+                backgroundColor: G.colors.cardStrong,
                 borderWidth: 1,
-                borderColor: "rgba(148, 163, 184, 0.4)",
+                borderColor: G.colors.border,
               }}
             >
               <Text
                 style={{
-                  color: "#9ca3af",
+                  color: G.colors.textMuted,
                   fontSize: 12,
                   marginBottom: 4,
                 }}
@@ -333,7 +458,7 @@ export default function HomeScreen({ navigation }: Props) {
                 <View>
                   <Text
                     style={{
-                      color: "#e5e7eb",
+                      color: G.colors.textMuted,
                       fontSize: 13,
                       marginBottom: 2,
                     }}
@@ -342,7 +467,7 @@ export default function HomeScreen({ navigation }: Props) {
                   </Text>
                   <Text
                     style={{
-                      color: "#f9fafb",
+                      color: G.colors.text,
                       fontSize: 22,
                       fontWeight: "800",
                     }}
@@ -351,32 +476,30 @@ export default function HomeScreen({ navigation }: Props) {
                   </Text>
                 </View>
 
-                {/* GAD preview */}
+                {/* GAD today (Step Engine V2) */}
                 <View style={{ alignItems: "flex-end" }}>
                   <Text
                     style={{
-                      color: "#e5e7eb",
+                      color: G.colors.textMuted,
                       fontSize: 13,
                       marginBottom: 2,
                     }}
                   >
-                    GAD preview
+                    GAD today
                   </Text>
                   <Text
                     style={{
-                      color: "#facc15",
+                      color: G.colors.accent,
                       fontSize: 18,
                       fontWeight: "700",
                     }}
                   >
-                    {stats.lastRewardGad != null
-                      ? `${stats.lastRewardGad} GAD`
-                      : "—"}
+                    {gadLabel}
                   </Text>
                   {stats.lastRewardDate && (
                     <Text
                       style={{
-                        color: "#6b7280",
+                        color: G.colors.textMuted,
                         fontSize: 11,
                         marginTop: 2,
                       }}
@@ -387,15 +510,40 @@ export default function HomeScreen({ navigation }: Props) {
                 </View>
               </View>
 
+              {/* статус дня (если есть) */}
+              {stats.todayRewardStatus && (
+                <Text
+                  style={{
+                    color: G.colors.textMuted,
+                    fontSize: 11,
+                    marginTop: 6,
+                  }}
+                >
+                  Today status: {stats.todayRewardStatus}
+                </Text>
+              )}
+
               {loadingStats && (
                 <Text
                   style={{
-                    color: "#6b7280",
+                    color: G.colors.textMuted,
                     fontSize: 11,
                     marginTop: 6,
                   }}
                 >
                   Loading your stats…
+                </Text>
+              )}
+
+              {isDemo && (
+                <Text
+                  style={{
+                    color: G.colors.demoAccent,
+                    fontSize: 11,
+                    marginTop: 6,
+                  }}
+                >
+                  Demo mode: showing sample family progress.
                 </Text>
               )}
             </View>
@@ -406,14 +554,14 @@ export default function HomeScreen({ navigation }: Props) {
                 style={{
                   fontSize: 16,
                   fontWeight: "700",
-                  color: "#f9fafb",
+                  color: G.colors.text,
                 }}
               >
                 Welcome to GAD Family
               </Text>
               <Text
                 style={{
-                  color: "#cbd5f5",
+                  color: G.colors.textSoft,
                   marginTop: 6,
                   fontSize: 14,
                   lineHeight: 20,
@@ -436,7 +584,7 @@ export default function HomeScreen({ navigation }: Props) {
           >
             <Text
               style={{
-                color: "#e5e7eb",
+                color: G.colors.text,
                 fontWeight: "700",
                 fontSize: 16,
                 marginBottom: 16,
@@ -446,39 +594,46 @@ export default function HomeScreen({ navigation }: Props) {
             </Text>
 
             {renderButton("Open Wallet", () => navigation.navigate("Wallet"))}
+
             {renderButton(
               "Steps Tracker",
               () => navigation.navigate("Steps"),
               "Track your daily steps and progress."
             )}
+
             {renderButton(
               "Family & Treasury",
-              () => navigation.navigate("Family"),
+              () => navigation.navigate("Families"),
               "Manage family members, vault and tasks."
             )}
+
             {renderButton(
               "Wallet History",
               () => navigation.navigate("WalletActivity"),
               "View on-chain activity of your GAD wallet."
             )}
+
             {renderButton(
               "My NFTs",
               () => navigation.navigate("NFTGallery"),
               "Browse your GAD ecosystem NFTs."
             )}
+
             {renderButton(
               "Family Goals",
               () => navigation.navigate("FamilyGoals"),
               "Set long-term milestones for your family."
             )}
+
             {renderButton(
               "AI Assistant",
               () => navigation.navigate("Assistant"),
               "Ask questions and get guidance inside the app."
             )}
+
             {renderButton(
               "Settings",
-              () => navigation.navigate("More"),
+              () => navigation.navigate("Settings"),
               "Location, discovery, referrals, wallet tools."
             )}
           </Animated.View>

@@ -13,6 +13,28 @@ import { fn } from "./functionsClient";
 import * as Linking from "expo-linking";
 import { Share } from "react-native";
 
+/* ----------------------------------------------------------- */
+/* Geolocation settings                                        */
+/* ----------------------------------------------------------- */
+
+export type GeolocationSettings = {
+  shareLocation: boolean;
+  mode: "foreground" | "background";
+  intervalMinutes: number;
+  lastPermissionStatus: "granted" | "denied" | "undetermined";
+};
+
+const DEFAULT_GEOLOCATION_SETTINGS: GeolocationSettings = {
+  shareLocation: true,
+  mode: "foreground",
+  intervalMinutes: 5,
+  lastPermissionStatus: "undetermined",
+};
+
+/* ----------------------------------------------------------- */
+/* User base helpers                                           */
+/* ----------------------------------------------------------- */
+
 /**
  * Ensure that users/{uid} document exists.
  */
@@ -47,6 +69,77 @@ export async function getUserProfile() {
   const snap = await getDoc(ref);
   return snap.exists() ? { id: uid, ...(snap.data() as any) } : null;
 }
+
+/* ----------------------------------------------------------- */
+/* GeolocationSettings helpers (geoSettings в users/{uid})     */
+/* ----------------------------------------------------------- */
+
+/**
+ * Прочитать настройки геолокации пользователя.
+ * Если настроек нет — вернёт null (UI может подсветить первый запуск).
+ *
+ * uid:
+ *  - если не передан, берём auth.currentUser?.uid
+ */
+export async function getGeolocationSettings(
+  uid?: string
+): Promise<GeolocationSettings | null> {
+  const effUid = uid ?? auth.currentUser?.uid;
+  if (!effUid) return null;
+
+  const ref = doc(db, "users", effUid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+
+  const data = snap.data() as any;
+  const raw = data.geoSettings as Partial<GeolocationSettings> | undefined;
+  if (!raw) return null;
+
+  // Нормализуем с дефолтами (на случай старых полей)
+  return {
+    ...DEFAULT_GEOLOCATION_SETTINGS,
+    ...raw,
+  };
+}
+
+/**
+ * Обновить настройки геолокации пользоватeля.
+ *
+ * uid:
+ *  - если не передан, берём auth.currentUser?.uid
+ *
+ * patch:
+ *  - частичное обновление, остальное дотягиваем из старых значений/дефолтов.
+ */
+export async function updateGeolocationSettings(
+  uid: string | undefined,
+  patch: Partial<GeolocationSettings>
+): Promise<void> {
+  const effUid = uid ?? auth.currentUser?.uid;
+  if (!effUid) throw new Error("No user");
+
+  const ref = doc(db, "users", effUid);
+
+  const existing = await getGeolocationSettings(effUid);
+  const merged: GeolocationSettings = {
+    ...DEFAULT_GEOLOCATION_SETTINGS,
+    ...(existing ?? {}),
+    ...patch,
+  };
+
+  await setDoc(
+    ref,
+    {
+      geoSettings: merged,
+      geoSettingsUpdatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/* ----------------------------------------------------------- */
+/* Referral logic                                              */
+/* ----------------------------------------------------------- */
 
 /**
  * Build referral link

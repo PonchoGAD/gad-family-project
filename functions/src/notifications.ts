@@ -1,145 +1,390 @@
 // functions/src/notifications.ts
-
 import * as admin from "firebase-admin";
-import {
-  onDocumentCreated,
-  onDocumentUpdated,
-} from "firebase-functions/v2/firestore";
+import { logger } from "firebase-functions/v2";
+import { onCall } from "firebase-functions/v2/https";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { logPushEvent } from "./pushLogs.js";
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const db = admin.firestore();
 
-/* -------------------------------------------------------------------------- */
-/*                     EXPO PUSH NOTIFICATION SENDER                          */
-/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------
+   UTIL: Нормализация пуш-токенов
+------------------------------------------------------------- */
+function normalizeToken(token: string): "expo" | "fcm" | null {
+  if (!token) return null;
 
-/**
- * Отправляет push-уведомления через Expo.
- * В Node 18 fetch доступен глобально, node-fetch не нужен.
- */
-async function sendExpoPush(tokens: string[], title: string, body: string) {
-  if (!tokens || tokens.length === 0) return;
+  if (token.startsWith("ExponentPushToken[")) return "expo";
+  if (token.length > 100) return "fcm";
 
-  const messages = tokens.map((token) => ({
-    to: token,
-    sound: "default",
-    title,
-    body,
-    priority: "high",
-  }));
-
-  const res = await fetch("https://exp.host/--/api/v2/push/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(messages),
-  });
-
-  const json = await res.json();
-  console.log("Expo push result:", json);
+  return null;
 }
 
-/* -------------------------------------------------------------------------- */
-/*                         TASK NOTIFICATION TRIGGER                          */
-/* -------------------------------------------------------------------------- */
+type PushContext = {
+  uid?: string | null;
+  fid?: string | null;
+  pushType?: string | null;
+};
 
-/**
- * Запускается при создании новой задачи
- * families/{fid}/tasks/{taskId}
- */
-export const notifyTaskAssigned = onDocumentCreated(
-  "families/{fid}/tasks/{taskId}",
-  async (event) => {
-    const snap = event.data;
-    if (!snap) return;
+/* -------------------------------------------------------------
+   SEND: Отправить пуш на один конкретный токен
+------------------------------------------------------------- */
+async function sendPushToToken(
+  token: string,
+  payload: any,
+  ctx?: PushContext
+) {
+  const providerNorm = normalizeToken(token);
+  const provider: "expo" | "fcm" | "unknown" =
+    providerNorm === "expo" || providerNorm === "fcm"
+      ? providerNorm
+      : "unknown";
 
-    const data = snap.data() as any;
-    if (!data) return;
+  const pushType: string | null =
+    ctx?.pushType ?? (payload?.data?.pushType ?? null);
 
-    const assignedTo: string[] = data.assignedTo ?? [];
-    if (assignedTo.length === 0) return;
+  try {
+    // 🔹 Expo token
+    if (provider === "expo") {
+      logger.info("[push] Expo token detected:", token);
 
-    console.log("TASK CREATED → assignedTo:", assignedTo);
+      const res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: token,
+          sound: "default",
+          title: payload.title,
+          body: payload.body,
+          data: payload.data ?? {},
+        }),
+      });
 
-    let allTokens: string[] = [];
+      const json = await res.json();
+      logger.info("[push] Expo response:", json);
 
-    for (const uid of assignedTo) {
-      const uDoc = await db.doc(`users/${uid}`).get();
-      const tokens: string[] = (uDoc.get("expoTokens") as string[]) ?? [];
-      if (tokens && tokens.length > 0) {
-        allTokens.push(...tokens);
-      }
+      await logPushEvent({
+        uid: ctx?.uid ?? null,
+        fid: ctx?.fid ?? null,
+        token,
+        provider: "expo",
+        status: "success",
+        message: payload?.title ?? "Expo push",
+        errorCode: null,
+        pushType,
+        meta: {
+          providerResponse: json,
+          data: payload?.data ?? null,
+        },
+      });
+
+      return { ok: true };
     }
 
-    if (allTokens.length === 0) {
-      console.log("No expoTokens found → skip push");
-      return;
+    // 🔹 FCM token
+    if (provider === "fcm") {
+      logger.info("[push] FCM token detected:", token);
+
+      await admin.messaging().send({
+        token,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+        },
+        data: payload.data ?? {},
+      });
+
+      await logPushEvent({
+        uid: ctx?.uid ?? null,
+        fid: ctx?.fid ?? null,
+        token,
+        provider: "fcm",
+        status: "success",
+        message: payload?.title ?? "FCM push",
+        errorCode: null,
+        pushType,
+        meta: {
+          data: payload?.data ?? null,
+        },
+      });
+
+      return { ok: true };
     }
 
-    await sendExpoPush(
-      allTokens,
-      "New Task Assigned",
-      data.title ?? "You have a new family task"
-    );
-  }
-);
+    // Неизвестный формат токена
+    logger.warn("[push] Unknown token format:", token);
 
-/* -------------------------------------------------------------------------- */
-/*                       GOAL PROGRESS NOTIFICATION                           */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Уведомляет взрослых о прогрессе цели
- * families/{fid}/goals/{goalId}
- */
-export const notifyGoalUpdated = onDocumentUpdated(
-  "families/{fid}/goals/{goalId}",
-  async (event) => {
-    const before = event.data?.before?.data() as any | undefined;
-    const after = event.data?.after?.data() as any | undefined;
-
-    if (!before || !after) return;
-
-    // Если прогресс не изменился — не уведомляем
-    if (before.currentPoints === after.currentPoints) {
-      return;
-    }
-
-    const fid = event.params.fid as string;
-    console.log(`GOAL UPDATED in family ${fid}`);
-
-    // Получаем всех членов семьи
-    const membersSnap = await db
-      .collection(`families/${fid}/members`)
-      .get();
-
-    const adults: string[] = [];
-    membersSnap.forEach((m) => {
-      if (m.get("isAdult") === true) {
-        adults.push(m.id);
-      }
+    await logPushEvent({
+      uid: ctx?.uid ?? null,
+      fid: ctx?.fid ?? null,
+      token,
+      provider: "unknown",
+      status: "error",
+      message: "Unknown token format",
+      errorCode: "unknown-format",
+      pushType,
+      meta: {
+        data: payload?.data ?? null,
+      },
     });
 
-    console.log("Adult members:", adults);
+    return { ok: false, error: "unknown-format" };
+  } catch (err: any) {
+    logger.error("[push] send error:", err);
 
-    if (adults.length === 0) return;
+    const msg = err?.errorInfo?.message || err?.message || String(err);
 
-    let allTokens: string[] = [];
+    const mustDelete =
+      msg.includes("InvalidRegistration") ||
+      msg.includes("NotRegistered") ||
+      (msg.includes("expo") && msg.includes("DeviceNotRegistered"));
 
-    for (const uid of adults) {
-      const uDoc = await db.doc(`users/${uid}`).get();
-      const tokens: string[] = (uDoc.get("expoTokens") as string[]) ?? [];
-      if (tokens && tokens.length > 0) {
-        allTokens.push(...tokens);
-      }
+    await logPushEvent({
+      uid: ctx?.uid ?? null,
+      fid: ctx?.fid ?? null,
+      token,
+      provider,
+      status: "error",
+      message: payload?.title ?? "Push send error",
+      errorCode: msg,
+      pushType,
+      meta: {
+        errorRaw: msg,
+      },
+    });
+
+    return { ok: false, error: msg, delete: mustDelete };
+  }
+}
+
+/* -------------------------------------------------------------
+   CORE: Отправить пуш пользователю по uid
+------------------------------------------------------------- */
+export async function sendPushToUser(
+  uid: string,
+  payload: {
+    title: string;
+    body: string;
+    data?: any;
+  }
+) {
+  const uRef = db.collection("users").doc(uid);
+  const snap = await uRef.get();
+
+  // user не найден
+  if (!snap.exists) {
+    logger.warn("[push] user not found:", uid);
+
+    await logPushEvent({
+      uid,
+      fid: null,
+      token: null,
+      provider: "unknown",
+      status: "error",
+      message: "User not found for push",
+      errorCode: "user_not_found",
+      pushType: payload?.data?.pushType ?? null,
+      meta: {},
+    });
+
+    return;
+  }
+
+  const user = snap.data() as any;
+
+  const token = user.pushToken;
+  const fid = (user.familyId as string | undefined) ?? null;
+
+  // нет токена
+  if (!token) {
+    logger.warn("[push] no pushToken for uid:", uid);
+
+    await logPushEvent({
+      uid,
+      fid,
+      token: null,
+      provider: "unknown",
+      status: "error",
+      message: "No pushToken for user",
+      errorCode: "no_push_token",
+      pushType: payload?.data?.pushType ?? null,
+      meta: {},
+    });
+
+    return;
+  }
+
+  const res = await sendPushToToken(token, payload, {
+    uid,
+    fid,
+    pushType: payload?.data?.pushType ?? null,
+  });
+
+  if ((res as any).delete) {
+    logger.warn("[push] deleting invalid token for uid:", uid);
+    await uRef.update({ pushToken: admin.firestore.FieldValue.delete() });
+  }
+}
+
+/* -------------------------------------------------------------
+   ALERT FILTER: решаем, слать ли пуш члену семьи
+------------------------------------------------------------- */
+
+type MemberAlertPreferences = Record<string, any> | undefined;
+
+function shouldSendAlertToMember(options: {
+  role?: string | null;
+  alertPreferences?: MemberAlertPreferences;
+  pushType?: string | null;
+}): boolean {
+  const role = (options.role ?? "").toLowerCase();
+  const prefs = options.alertPreferences;
+  const pushType = options.pushType ?? null;
+
+  // Нет типа и нет настроек — стандартное поведение: шлём как раньше
+  if (!pushType && !prefs) return true;
+
+  // SOS и low_battery — только родителям / владельцу по умолчанию
+  if (pushType === "sos" || pushType === "low_battery") {
+    const isParentOrOwner = role === "parent" || role === "owner";
+
+    // если явно отключено в prefs → не слать даже родителям
+    if (prefs && Object.prototype.hasOwnProperty.call(prefs, pushType)) {
+      const val = prefs[pushType];
+      if (val === false) return false;
     }
 
-    if (allTokens.length === 0) {
-      console.log("Goal updated → no tokens");
-      return;
+    return isParentOrOwner;
+  }
+
+  // Для остальных типов: если есть prefs и конкретный тип отключён → не слать
+  if (pushType && prefs) {
+    if (Object.prototype.hasOwnProperty.call(prefs, pushType)) {
+      const val = prefs[pushType];
+      if (val === false) return false;
+    }
+  }
+
+  // По умолчанию — слать
+  return true;
+}
+
+/* -------------------------------------------------------------
+   FAMILY: Отправить пуш ВСЕЙ семье (с фильтрацией по роли/настройкам)
+------------------------------------------------------------- */
+export async function sendPushToFamily(
+  fid: string,
+  payload: {
+    title: string;
+    body: string;
+    data?: any;
+  }
+) {
+  const membersRef = db.collection("families").doc(fid).collection("members");
+  const members = await membersRef.get();
+
+  const pushType: string | null = payload?.data?.pushType ?? null;
+
+  logger.info(
+    `[push] Sending to family ${fid}, members ${members.size}, pushType=${pushType}`
+  );
+
+  // Логируем сам факт family-push (агрегированный уровень)
+  await logPushEvent({
+    uid: null,
+    fid,
+    token: null,
+    provider: "unknown",
+    status: "success",
+    message: "Family push started",
+    errorCode: null,
+    pushType,
+    meta: {
+      membersCount: members.size,
+    },
+  });
+
+  for (const docSnap of members.docs) {
+    const uid = docSnap.id;
+    const m = docSnap.data() as any;
+    const role = (m.role as string | undefined) ?? null;
+    const alertPreferences =
+      (m.alertPreferences as Record<string, any> | undefined) ?? undefined;
+
+    const allowed = shouldSendAlertToMember({
+      role,
+      alertPreferences,
+      pushType,
+    });
+
+    if (!allowed) {
+      // Логируем факт фильтрации этого участника
+      await logPushEvent({
+        uid,
+        fid,
+        token: null,
+        provider: "unknown",
+        status: "success",
+        message: "Family push skipped by filter",
+        errorCode: null,
+        pushType,
+        meta: {
+          role,
+          reason: "filtered_by_role_or_prefs",
+        },
+      });
+      continue;
     }
 
-    const title = after.title ?? "Family Goal Updated";
-    const progressMsg = `Goal "${title}" updated: ${after.currentPoints}/${after.targetPoints} points`;
+    await sendPushToUser(uid, {
+      ...payload,
+      data: {
+        ...(payload.data ?? {}),
+        // подсветим, что пуш семейный
+        familyId: fid,
+      },
+    });
+  }
+}
 
-    await sendExpoPush(allTokens, "Family Goal Updated", progressMsg);
+/* -------------------------------------------------------------
+   Firestore Trigger (пример):
+   safe zones → пуш родителям
+------------------------------------------------------------- */
+export const onSafeZoneEvent = onDocumentCreated(
+  "families/{fid}/geoEvents/{eventId}",
+  async (event) => {
+    const { fid } = event.params;
+    const ev = event.data?.data();
+
+    if (!ev) return;
+
+    await sendPushToFamily(fid, {
+      title: "Safe Zone Update",
+      body: ev.message ?? "Location update",
+      data: {
+        type: "geo_event",
+        pushType: "safe_zone",
+        ...ev,
+      },
+    });
   }
 );
+
+/* -------------------------------------------------------------
+   Callable API (по запросу клиента)
+------------------------------------------------------------- */
+export const pushToUser = onCall(async (req) => {
+  const { uid, title, body, data } = req.data;
+  await sendPushToUser(uid, { title, body, data });
+  return { ok: true };
+});
+
+export const pushToFamily = onCall(async (req) => {
+  const { fid, title, body, data } = req.data;
+  await sendPushToFamily(fid, { title, body, data });
+  return { ok: true };
+});

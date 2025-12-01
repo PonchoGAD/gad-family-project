@@ -1,11 +1,21 @@
 // apps/mobile/src/screens/FamilyTreasuryScreen.tsx
+
 import React, { useEffect, useState } from "react";
 import { ScrollView, View, Text } from "react-native";
 import LockTimer from "../components/LockTimer";
 import ProofOfLock from "../components/ProofOfLock";
 
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+  where,
+} from "firebase/firestore";
 import { signInAnonymously } from "firebase/auth";
 
 type FamilyVault = {
@@ -15,11 +25,23 @@ type FamilyVault = {
   [key: string]: any;
 };
 
+type FamilyLedgerEntry = {
+  id: string;
+  type: string;
+  date?: string;
+  amount?: number;
+  fromUser?: string;
+  runId?: string;
+  createdAt?: any;
+};
+
 export default function FamilyTreasuryScreen() {
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [vault, setVault] = useState<FamilyVault | null>(null);
   const [loadingVault, setLoadingVault] = useState<boolean>(true);
   const [vaultError, setVaultError] = useState<string | null>(null);
+
+  const [ledger, setLedger] = useState<FamilyLedgerEntry[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -38,10 +60,11 @@ export default function FamilyTreasuryScreen() {
 
         if (!fid) {
           setVault(null);
+          setLedger([]);
           return;
         }
 
-        // FIX: read families/{fid}/vault/main
+        // families/{fid}/vault/main
         const vSnap = await getDoc(
           doc(db, "families", fid, "vault", "main")
         );
@@ -51,6 +74,8 @@ export default function FamilyTreasuryScreen() {
         } else {
           setVault(null);
         }
+
+        setVaultError(null);
       } catch (e: any) {
         console.log("FamilyTreasury vault load error", e);
         setVaultError(e?.message ?? "Failed to load family vault");
@@ -59,6 +84,42 @@ export default function FamilyTreasuryScreen() {
       }
     })();
   }, []);
+
+  // Подписка на ledger (steps_reward)
+  useEffect(() => {
+    if (!familyId) return;
+
+    const ledgerRef = collection(
+      db,
+      "families",
+      familyId,
+      "treasury",
+      "ledger"
+    );
+
+    const q = query(
+      ledgerRef,
+      where("type", "==", "steps_reward"),
+      orderBy("date", "desc"),
+      limit(50)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (qs) => {
+        const rows: FamilyLedgerEntry[] = qs.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+        setLedger(rows);
+      },
+      (err) => {
+        console.log("FamilyTreasury ledger error", err);
+      }
+    );
+
+    return () => unsub();
+  }, [familyId]);
 
   const renderVaultCard = () => {
     if (!familyId && !loadingVault) {
@@ -176,6 +237,68 @@ export default function FamilyTreasuryScreen() {
     );
   };
 
+  const renderLedgerCard = () => {
+    if (!familyId) {
+      return null;
+    }
+
+    return (
+      <View
+        style={{
+          borderRadius: 12,
+          padding: 12,
+          backgroundColor: "#111827",
+          marginTop: 16,
+        }}
+      >
+        <Text style={{ color: "#f9fafb", fontWeight: "600", fontSize: 16 }}>
+          Steps rewards ledger
+        </Text>
+        <Text style={{ color: "#9ca3af", fontSize: 13, marginTop: 4 }}>
+          Daily family share from Step Engine V2 (type: steps_reward).
+        </Text>
+
+        {ledger.length === 0 ? (
+          <Text style={{ color: "#6b7280", marginTop: 8 }}>
+            No step rewards recorded yet.
+          </Text>
+        ) : (
+          ledger.map((entry) => (
+            <View
+              key={entry.id}
+              style={{
+                marginTop: 8,
+                paddingVertical: 6,
+                borderBottomWidth: 1,
+                borderBottomColor: "rgba(31,41,55,0.7)",
+              }}
+            >
+              <Text
+                style={{
+                  color: "#e5e7eb",
+                  fontSize: 14,
+                  fontWeight: "500",
+                }}
+              >
+                {entry.date ?? "—"} •{" "}
+                {(entry.amount ?? 0).toLocaleString("en-US")} GAD Points
+              </Text>
+              <Text
+                style={{
+                  color: "#9ca3af",
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                From user: {entry.fromUser ?? "—"}
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: "#0b0c0f" }}
@@ -187,13 +310,15 @@ export default function FamilyTreasuryScreen() {
         </Text>
         <Text style={{ color: "#9ca3af", fontSize: 14 }}>
           Long-term locked GAD for your family. This screen shows the global
-          treasury lock schedule and public proof of lock.
+          treasury lock schedule, public proof of lock, and step-based family
+          rewards.
         </Text>
 
         <LockTimer />
         <ProofOfLock />
 
         {renderVaultCard()}
+        {renderLedgerCard()}
       </View>
     </ScrollView>
   );

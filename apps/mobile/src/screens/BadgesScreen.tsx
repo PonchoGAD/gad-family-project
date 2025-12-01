@@ -17,6 +17,8 @@ import {
   query,
   DocumentData,
 } from "firebase/firestore";
+import { useTheme } from "../wallet/ui/theme";
+import { useActiveUid, useIsDemo } from "../demo/DemoContext";
 
 type Badge = {
   id: string;
@@ -40,27 +42,97 @@ const BADGE_FILTERS: { id: string; label: string }[] = [
 function formatDate(ts?: { seconds: number } | number): string {
   if (!ts) return "—";
   if (typeof ts === "number") {
-    return new Date(ts).toLocaleString();
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
   }
   if (typeof ts.seconds === "number") {
-    return new Date(ts.seconds * 1000).toLocaleString();
+    const d = new Date(ts.seconds * 1000);
+    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
   }
   return "—";
 }
 
 export default function BadgesScreen() {
+  const G = useTheme();
+  const { uid: ctxUid } = useActiveUid();
+  const isDemo = useIsDemo();
+
+  const uid = ctxUid ?? auth.currentUser?.uid ?? null;
+
   const [loading, setLoading] = useState(true);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
+    // DEMO: витрина бейджей, вообще без Firestore
+    if (isDemo) {
+      const now = Date.now();
+      setBadges([
+        {
+          id: "demo-steps-1",
+          type: "steps",
+          level: 1,
+          title: "First 5,000 steps",
+          earnedAt: now - 1000 * 60 * 60 * 24,
+          locked: false,
+          meta: { steps: 5_000 },
+        },
+        {
+          id: "demo-steps-2",
+          type: "steps",
+          level: 2,
+          title: "10,000 steps day",
+          earnedAt: now - 1000 * 60 * 60 * 48,
+          locked: false,
+          meta: { steps: 10_000 },
+        },
+        {
+          id: "demo-tasks-1",
+          type: "tasks",
+          level: 1,
+          title: "Family Tasks Starter",
+          earnedAt: now - 1000 * 60 * 60 * 72,
+          locked: false,
+          meta: { tasks: 3 },
+        },
+        {
+          id: "demo-geo-1",
+          type: "geo",
+          level: 1,
+          title: "Safe Zone Explorer",
+          earnedAt: now - 1000 * 60 * 60 * 96,
+          locked: false,
+          meta: { geoEvents: 2 },
+        },
+        {
+          id: "demo-ai-1",
+          type: "ai",
+          level: 1,
+          title: "Asked AI for help",
+          earnedAt: now - 1000 * 60 * 60 * 120,
+          locked: false,
+          meta: { aiCalls: 1 },
+        },
+        {
+          id: "demo-streak-1",
+          type: "streak",
+          level: 1,
+          title: "3-day streak",
+          earnedAt: now - 1000 * 60 * 60 * 144,
+          locked: false,
+        },
+      ]);
       setLoading(false);
       return;
     }
 
-    const coll = collection(db, "users", user.uid, "badges");
+    if (!uid) {
+      setLoading(false);
+      setBadges([]);
+      return;
+    }
+
+    const coll = collection(db, "users", uid, "badges");
     const q = query(coll, orderBy("earnedAt", "desc"));
 
     const unsub = onSnapshot(
@@ -85,7 +157,7 @@ export default function BadgesScreen() {
     );
 
     return () => unsub();
-  }, []);
+  }, [uid, isDemo]);
 
   const filteredBadges = useMemo(() => {
     if (filter === "all") return badges;
@@ -97,13 +169,13 @@ export default function BadgesScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: "#020617",
+          backgroundColor: G.colors.bg,
           justifyContent: "center",
           alignItems: "center",
         }}
       >
-        <ActivityIndicator />
-        <Text style={{ color: "#9ca3af", marginTop: 8 }}>
+        <ActivityIndicator color={G.colors.accent} />
+        <Text style={{ color: G.colors.textMuted, marginTop: 8 }}>
           Loading badges…
         </Text>
       </View>
@@ -112,19 +184,30 @@ export default function BadgesScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: "#020617" }}
+      style={{ flex: 1, backgroundColor: G.colors.bg }}
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       showsVerticalScrollIndicator={false}
     >
       <Text
         style={{
-          color: "#f9fafb",
+          color: G.colors.text,
           fontSize: 22,
           fontWeight: "700",
+          marginBottom: 4,
+        }}
+      >
+        Badges {isDemo ? "(demo)" : ""}
+      </Text>
+
+      <Text
+        style={{
+          color: G.colors.textMuted,
+          fontSize: 13,
           marginBottom: 12,
         }}
       >
-        Badges
+        Earn badges for walking, completing tasks, using safe zones and AI
+        assistant. They visualize your family’s progress.
       </Text>
 
       {/* Filter */}
@@ -144,16 +227,14 @@ export default function BadgesScreen() {
                 paddingVertical: 6,
                 borderRadius: 999,
                 marginRight: 8,
-                backgroundColor: isActive ? "#3b82f6" : "#0f172a",
+                backgroundColor: isActive ? G.colors.accent : G.colors.card,
                 borderWidth: 1,
-                borderColor: isActive
-                  ? "rgba(96,165,250,0.9)"
-                  : "rgba(31,41,55,0.9)",
+                borderColor: isActive ? G.colors.accent : G.colors.border,
               }}
             >
               <Text
                 style={{
-                  color: isActive ? "#f9fafb" : "#9ca3af",
+                  color: isActive ? "#051b0d" : G.colors.textMuted,
                   fontSize: 13,
                   fontWeight: "600",
                 }}
@@ -169,23 +250,25 @@ export default function BadgesScreen() {
       {filteredBadges.length === 0 ? (
         <View
           style={{
-            backgroundColor: "#0f172a",
+            backgroundColor: G.colors.card,
             padding: 16,
             borderRadius: 16,
+            borderWidth: 1,
+            borderColor: G.colors.border,
           }}
         >
           <Text
             style={{
-              color: "#e5e7eb",
+              color: G.colors.text,
               fontWeight: "500",
               marginBottom: 4,
             }}
           >
             No badges yet
           </Text>
-          <Text style={{ color: "#9ca3af", fontSize: 13 }}>
-            Walk, complete tasks, explore geo-events and use the assistant to
-            start earning badges.
+          <Text style={{ color: G.colors.textMuted, fontSize: 13 }}>
+            Walk, complete tasks, explore safe zones and talk to the assistant
+            to start unlocking badges.
           </Text>
         </View>
       ) : (
@@ -205,19 +288,17 @@ export default function BadgesScreen() {
                 key={b.id}
                 style={{
                   width: "48%",
-                  backgroundColor: "#0f172a",
+                  backgroundColor: G.colors.card,
                   borderRadius: 16,
                   padding: 12,
                   borderWidth: 1,
-                  borderColor: locked
-                    ? "rgba(75,85,99,0.8)"
-                    : "rgba(96,165,250,0.9)",
+                  borderColor: locked ? G.colors.border : G.colors.accent,
                   opacity: locked ? 0.6 : 1,
                 }}
               >
                 <Text
                   style={{
-                    color: locked ? "#6b7280" : "#f9fafb",
+                    color: locked ? G.colors.textMuted : G.colors.text,
                     fontWeight: "700",
                     fontSize: 14,
                     marginBottom: 4,
@@ -229,7 +310,7 @@ export default function BadgesScreen() {
 
                 <Text
                   style={{
-                    color: "#9ca3af",
+                    color: G.colors.textMuted,
                     fontSize: 11,
                     marginBottom: 4,
                   }}
@@ -240,7 +321,7 @@ export default function BadgesScreen() {
 
                 <Text
                   style={{
-                    color: "#6b7280",
+                    color: G.colors.textMuted,
                     fontSize: 11,
                     marginBottom: 4,
                   }}
@@ -249,22 +330,22 @@ export default function BadgesScreen() {
                 </Text>
 
                 {b.meta?.steps && (
-                  <Text style={{ color: "#9ca3af", fontSize: 11 }}>
+                  <Text style={{ color: G.colors.textMuted, fontSize: 11 }}>
                     Steps: {b.meta.steps.toLocaleString("en-US")}
                   </Text>
                 )}
                 {b.meta?.tasks && (
-                  <Text style={{ color: "#9ca3af", fontSize: 11 }}>
+                  <Text style={{ color: G.colors.textMuted, fontSize: 11 }}>
                     Tasks: {b.meta.tasks.toLocaleString("en-US")}
                   </Text>
                 )}
                 {b.meta?.geoEvents && (
-                  <Text style={{ color: "#9ca3af", fontSize: 11 }}>
+                  <Text style={{ color: G.colors.textMuted, fontSize: 11 }}>
                     Geo events: {b.meta.geoEvents}
                   </Text>
                 )}
                 {b.meta?.aiCalls && (
-                  <Text style={{ color: "#9ca3af", fontSize: 11 }}>
+                  <Text style={{ color: G.colors.textMuted, fontSize: 11 }}>
                     AI calls: {b.meta.aiCalls}
                   </Text>
                 )}
